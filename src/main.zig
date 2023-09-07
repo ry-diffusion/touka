@@ -1,10 +1,20 @@
 const std = @import("std");
 const json = std.json;
 const fs = std.fs;
+const ast = @import("ast.zig");
+const AstReader = @import("reader.zig").AstReader;
+const dpplgngr = @import("doppelganger/runtime.zig");
 
 pub fn main() !void {
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{
+        .enable_memory_limit = true,
+    }){};
+
+    // 640 KiB
+    general_purpose_allocator.setRequestedMemoryLimit(640 * 1024);
+
     const gpa = general_purpose_allocator.allocator();
+
     defer std.debug.assert(general_purpose_allocator.deinit() == .ok);
 
     var argv = std.process.args();
@@ -20,5 +30,14 @@ pub fn main() !void {
     const inputFile = try fs.openFileAbsolute(absolutePath, .{ .mode = std.fs.File.OpenMode.read_only });
     defer inputFile.close();
 
-    _ = json.reader(gpa, inputFile);
+    var runtime = dpplgngr.Runtime.init(gpa);
+    defer runtime.deinit();
+
+    var reader = inputFile.reader();
+
+    var astReader = AstReader.fromFile(gpa, &runtime, reader);
+
+    defer astReader.deinit();
+
+    while (try astReader.next()) {}
 }
