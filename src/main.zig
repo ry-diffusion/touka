@@ -6,9 +6,7 @@ const AstReader = @import("reader.zig").AstReader;
 const dpplgngr = @import("doppelganger/runtime.zig");
 
 pub fn main() !void {
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{
-        .enable_memory_limit = true,
-    }){};
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .enable_memory_limit = true }){};
 
     // 640 KiB
     general_purpose_allocator.setRequestedMemoryLimit(640 * 1024);

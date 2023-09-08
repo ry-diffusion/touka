@@ -84,6 +84,7 @@ pub const AstReader = struct {
                     },
 
                     .function => |func| {
+                        log.debug("functs: {any}", .{func});
                         self.alloc.destroy(func);
                     },
 
@@ -97,7 +98,7 @@ pub const AstReader = struct {
 
     fn instropectLocation(self: *@This()) Error!spec.Location {
         try self.expectTreeStart();
-        var loc = spec.Location{ .start = 0, .end = 0, .filename = "" };
+        var loc = spec.Location.empty();
 
         while (!try self.isTreeFinished()) {
             const key = try self.expectKey();
@@ -151,8 +152,35 @@ pub const AstReader = struct {
     }
 
     fn instropectFunction(self: *@This()) Error!spec.Function {
-        _ = self;
-        return Error.Unimplemented;
+        //try self.expectTreeStart();
+        var func = spec.Function.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+
+            switch (key) {
+                .parameters => try self.parseParameters(&func.parameters),
+                .value => func.value = try self.instropectTerm(),
+                .location => func.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        try self.expectTreeEnd();
+
+        return func;
+    }
+
+    fn parseParameters(self: *@This(), params: *spec.Function.Parameters) Error!void {
+        try self.expect(.array_begin);
+
+        while (!try self.isArrayFinished()) {
+            const res = try self.instropectParameter();
+            var node = spec.Function.Parameters.Node{ .data = res };
+            params.prepend(&node);
+        }
+
+        try self.expect(.array_end);
     }
 
     fn instropectLet(self: *@This()) Error!spec.Let {
@@ -185,6 +213,18 @@ pub const AstReader = struct {
 
     fn strAsKey(str: []const u8) ?spec.KeyName {
         return std.meta.stringToEnum(spec.KeyName, str);
+    }
+
+    fn expect(self: *@This(), want: std.json.TokenType) Error!void {
+        const found = self.source.next() catch {
+            log.err("Expected a {any} found nothing instead", .{want});
+            return Error.NoValueFound;
+        };
+
+        if (@intFromEnum(found) != @intFromEnum(want)) {
+            log.err("Expected a {any} found {any} instead", .{ want, found });
+            return Error.TypeMismatch;
+        }
     }
 
     fn expectTreeEnd(self: *@This()) Error!void {
@@ -257,6 +297,16 @@ pub const AstReader = struct {
             return Error.SyntaxError;
         }) {
             .object_begin, .object_end, .end_of_document => return true,
+            else => return false,
+        }
+    }
+
+    fn isArrayFinished(self: *@This()) Error!bool {
+        switch (self.source.peekNextTokenType() catch |e| {
+            log.err("parse error: {any}", .{e});
+            return Error.SyntaxError;
+        }) {
+            .array_begin, .array_end, .end_of_document => return true,
             else => return false,
         }
     }
