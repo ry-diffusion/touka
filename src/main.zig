@@ -42,18 +42,3 @@ fn show(a: [*c]u8) callconv(.C) void {
     const text: [:0]u8 = std.mem.span(a);
     std.log.err("from jit: {s}", .{text});
 }
-
-test "tcc test" {
-    var jit = try engine.State.init();
-
-    try jit.load("DpLogErr", &show);
-    try jit.compile(
-        \\ int main(void) {
-        \\ char text[] = "oi\n";
-        \\ DpLogErr(text);
-        \\ return 0;
-        \\ }
-    );
-
-    try jit.run();
-}

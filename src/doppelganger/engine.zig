@@ -6,36 +6,83 @@ pub const c = @cImport({
     @cInclude("libtcc.h");
 });
 
-pub const Error = error{ TccInitError, TccCompileError, RunFailed };
+pub const Error = error{ TccInitError, TccCompileFailed, RunFailed, UnableToInsertSymbol, SetOptionFailed, UnableToReallocate };
 
 pub const State = struct {
-    ptr: *c.TCCState,
-    pub fn init() !State {
-        var s = State{ .ptr = c.tcc_new() orelse {
-            return Error.TccCompileError;
-        } };
+    compilerState: *c.TCCState,
+    alloc: std.mem.Allocator,
+    code: ?[]u8,
 
-        _ = c.tcc_set_output_type(s.ptr, c.TCC_OUTPUT_MEMORY);
-        _ = c.tcc_add_file(s.ptr, "/usr/lib/libc.so");
+    pub fn init(alloc: std.mem.Allocator) Error!State {
+        var s = State{
+            .code = null,
+            .alloc = alloc,
+            .compilerState = c.tcc_new() orelse {
+                return Error.TccInitError;
+            },
+        };
+
+        if (c.tcc_set_output_type(s.compilerState, c.TCC_OUTPUT_MEMORY) != 0) {
+            return Error.SetOptionFailed;
+        }
 
         return s;
     }
 
     pub fn compile(self: *@This(), source: [:0]const u8) !void {
-        if (c.tcc_compile_string(self.ptr, source) == -1) {
-            return Error.TccCompileError;
+        if (c.tcc_compile_string(self.compilerState, source) == -1) {
+            return Error.TccCompileFailed;
         }
     }
 
     pub fn run(self: *@This()) !void {
-        if (c.tcc_run(self.ptr, 0, null) != 0) {
+        if (c.tcc_run(self.compilerState, 0, null) != 0) {
             return Error.RunFailed;
         }
     }
 
-    pub fn load(self: *@This(), name: []const u8, func: *const anyopaque) !void {
-        var c_fact_var = @as(?*anyopaque, @ptrFromInt(@intFromPtr(func)));
+    pub fn insertSymbol(self: *@This(), name: []const u8, func: *const anyopaque) !void {
+        var cFunc = @as(?*anyopaque, @ptrFromInt(@intFromPtr(func)));
 
-        _ = c.tcc_add_symbol(self.ptr, @ptrCast(name), c_fact_var);
+        if (c.tcc_add_symbol(self.compilerState, @ptrCast(name), cFunc) != 0) {
+            return Error.UnableToInsertSymbol;
+        }
+    }
+
+    pub fn set(self: *@This(), name: []const u8, value: []const u8) void {
+        c.tcc_define_symbol(self.compilerState, @ptrCast(name), @ptrCast(value));
+    }
+
+    pub fn unset(self: *@This(), name: []const u8) void {
+        c.tcc_undefine_symbol(self.compilerState, @ptrCast(name));
+    }
+
+    pub fn exchange(self: *@This()) !void {
+        const size = c.tcc_relocate(self.compilerState, null);
+        if (size < 0)
+            return Error.UnableToReallocate;
+
+        if (self.code) |code|
+            self.code = try self.alloc.realloc(code, @intCast(size))
+        else
+            self.code = try self.alloc.alloc(u8, @intCast(size));
+
+        var cCode = @as(?*anyopaque, @ptrFromInt(@intFromPtr(self.code.?.ptr)));
+
+        if (c.tcc_relocate(self.compilerState, cCode) < 0)
+            return Error.UnableToReallocate;
+    }
+
+    pub fn getSymbol(self: *@This(), name: [:0]const u8, comptime T: type) ?*T {
+        var func: ?*T = @ptrCast(c.tcc_get_symbol(self.compilerState, @ptrCast(name)));
+
+        return func;
+    }
+
+    pub fn deinit(self: *@This()) void {
+        if (self.code) |code| {
+            self.alloc.free(code);
+        }
+        c.tcc_delete(self.compilerState);
     }
 };
