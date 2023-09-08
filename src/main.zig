@@ -4,6 +4,7 @@ const fs = std.fs;
 const ast = @import("ast.zig");
 const AstReader = @import("reader.zig").AstReader;
 const dpplgngr = @import("doppelganger/runtime.zig");
+const engine = @import("doppelganger/engine.zig");
 
 pub fn main() !void {
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .enable_memory_limit = true }){};
@@ -29,10 +30,30 @@ pub fn main() !void {
     const inputFile = try fs.openFileAbsolute(absolutePath, .{ .mode = std.fs.File.OpenMode.read_only });
     defer inputFile.close();
 
-    var runtime = dpplgngr.Runtime.init(gpa);
+    var runtime = try dpplgngr.Runtime.init(gpa);
     defer runtime.deinit();
 
     var reader = inputFile.reader();
 
     _ = try AstReader.parseEntire(gpa, &runtime, reader);
+}
+
+fn show(a: [*c]u8) callconv(.C) void {
+    const text: [:0]u8 = std.mem.span(a);
+    std.log.err("from jit: {s}", .{text});
+}
+
+test "tcc test" {
+    var jit = try engine.State.init();
+
+    try jit.load("DpLogErr", &show);
+    try jit.compile(
+        \\ int main(void) {
+        \\ char text[] = "oi\n";
+        \\ DpLogErr(text);
+        \\ return 0;
+        \\ }
+    );
+
+    try jit.run();
 }

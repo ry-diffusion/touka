@@ -1,0 +1,10 @@
+#!/bin/bash
+
+cd "$(dirname $0)"
+cd ..
+cd tcc
+rm config.h
+./configure --cc="zig cc" --with-libgcc
+echo "CFLAGS+=-DCONFIG_TCC_STATIC -flto" >> config.mak
+make -j$(nproc) libtcc.a
+

@@ -138,7 +138,13 @@ pub const AstReader = struct {
                 }
             },
 
-            else => return Error.Unimplemented,
+            .location => {
+                _ = try self.instropectLocation();
+            },
+
+            else => |s| {
+                std.debug.panic("unimplemented: {any}", .{s});
+            },
         }
     }
 
@@ -507,7 +513,7 @@ pub const AstReader = struct {
                 }
             },
 
-            .end_of_document => return false,
+            .object_end, .end_of_document => return false,
             .null => return true,
             else => |i| {
                 log.debug("ignoring {any}", .{i});
@@ -526,7 +532,11 @@ pub const AstReader = struct {
         var astReader = AstReader.fromFile(alloc, runtime, reader);
         defer astReader.deinit();
 
+        var timer = try std.time.Timer.start();
         while (try astReader.next()) {}
+
+        const elapsed = timer.read();
+        log.debug("read ast took: {}ms ({}us)", .{ elapsed / 1000 / 1000, elapsed / 1000 });
 
         return astReader;
     }

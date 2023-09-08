@@ -1,6 +1,7 @@
 const std = @import("std");
 const uv = @import("uv.zig");
 const t = @import("types.zig");
+const engine = @import("engine.zig");
 const inventory = @import("inventory.zig");
 const Inventory = inventory.Inventory;
 const Tuple = std.meta.Tuple;
@@ -9,10 +10,15 @@ pub const Runtime = struct {
     alloc: std.mem.Allocator,
     sourceName: ?[]u8 = null,
     global: Inventory,
+    compilerState: engine.State,
     const log = std.log.scoped(.doppelganger);
 
-    pub fn init(alloc: std.mem.Allocator) Runtime {
-        return Runtime{ .alloc = alloc, .global = Inventory.init(alloc) };
+    pub fn init(alloc: std.mem.Allocator) !Runtime {
+        return Runtime{
+            .alloc = alloc,
+            .global = Inventory.init(alloc),
+            .compilerState = try engine.State.init(),
+        };
     }
 
     pub fn setSourceName(self: *@This(), to: t.String) !void {
