@@ -20,6 +20,7 @@ pub const AstReader = struct {
     runtime: *rt.Runtime,
     stage: ReaderStage,
     alloc: mem.Allocator,
+    howDeep: u64,
     source: std.json.Reader(std.json.default_buffer_size, std.fs.File.Reader),
 
     const log = std.log.scoped(.astReader);
@@ -30,7 +31,7 @@ pub const AstReader = struct {
         return AstReader{
             .alloc = alloc,
             .source = source,
-
+            .howDeep = 0,
             .runtime = runtime,
             .stage = ReaderStage.readingRoot,
         };
@@ -40,6 +41,21 @@ pub const AstReader = struct {
         self.source.deinit();
     }
 
+    fn traverse(self: *@This()) Error!void {
+        while ((self.source.peekNextTokenType() catch {
+            return Error.SyntaxError;
+        }) == std.json.TokenType.object_end) {
+            self.howDeep += 1;
+            log.info("howDeep: {}", .{self.howDeep});
+
+            _ = self.source.next() catch {
+                return Error.SyntaxError;
+            };
+
+            break;
+        }
+    }
+
     fn expectString(self: *@This(), why: []const u8) Error![]const u8 {
         const item = self.source.next() catch {
             log.err("expected a string: {s}", .{why});
@@ -47,7 +63,8 @@ pub const AstReader = struct {
         };
 
         switch (item) {
-            .allocated_string, .string => |s| return s,
+            .allocated_string => return Error.Unimplemented,
+            .string => |s| return s,
 
             else => |i| {
                 log.err("expected a string, found {any}", .{i});
@@ -69,7 +86,7 @@ pub const AstReader = struct {
         log.debug("ast.root: {s}", .{str});
 
         const key = strAsKey(str) orelse {
-            log.err("unexpected key: {s}", .{str});
+            log.err("entryReader: unexpected key: {s}", .{str});
             return Error.InvalidKey;
         };
 
@@ -79,7 +96,36 @@ pub const AstReader = struct {
 
                 switch (term) {
                     .let => |let| {
-                        log.debug("oi {any}", .{let});
+                        log.debug("definindo {any}", .{let});
+                        self.alloc.destroy(let);
+                    },
+
+                    .print => |p| {
+                        log.debug("pq n né? vo mostrar assim kk {any}", .{p});
+                        self.alloc.destroy(p);
+                    },
+
+                    .call => |discord| {
+                        log.debug("eodiscord {any}", .{discord});
+                        self.alloc.destroy(discord);
+                    },
+
+                    .int => |int| {
+                        log.debug("inteiro: {}", .{int.value});
+                    },
+
+                    .varTerm => |let| {
+                        log.debug("usando {any}", .{let});
+                        self.alloc.destroy(let);
+                    },
+
+                    .binary => |let| {
+                        log.debug("0101 {any}", .{let});
+                        self.alloc.destroy(let);
+                    },
+
+                    .ifTerm => |let| {
+                        log.debug("se {any}", .{let});
                         self.alloc.destroy(let);
                     },
 
@@ -130,7 +176,7 @@ pub const AstReader = struct {
             }
         }
 
-        try self.expectTreeEnd();
+        try self.traverse();
 
         return param;
     }
@@ -140,15 +186,139 @@ pub const AstReader = struct {
             self.stage = .readingAst;
         } else {
             try self.expectTreeStart();
-            _ = try self.expectKey();
+            if (try self.expectKey() != .kind) {
+                return Error.InvalidKey;
+            }
         }
 
         const kind = try self.expectTerm();
+        var term = spec.Term.nil();
 
         switch (kind) {
-            .Let => return spec.Term{ .let = try box(self.alloc, spec.Let, try self.instropectLet()) },
-            .Function => return spec.Term{ .function = try box(self.alloc, spec.Function, try self.instropectFunction()) },
+            .Int => term = spec.Term{ .int = try self.instropectInt() },
+            .Print => term = spec.Term{ .print = try box(self.alloc, spec.Print, try self.instropectPrint()) },
+            .Var => term = spec.Term{ .varTerm = try box(self.alloc, spec.Var, try self.instropectVar()) },
+            .Call => term = spec.Term{ .call = try box(self.alloc, spec.Call, try self.instropectCall()) },
+            .Binary => term = spec.Term{ .binary = try box(self.alloc, spec.Binary, try self.instropectBinary()) },
+            .Let => term = spec.Term{ .let = try box(self.alloc, spec.Let, try self.instropectLet()) },
+            .If => term = spec.Term{ .ifTerm = try box(self.alloc, spec.If, try self.instropectIf()) },
+            .Function => term = spec.Term{ .function = try box(self.alloc, spec.Function, try self.instropectFunction()) },
         }
+
+        try self.traverse();
+        return term;
+    }
+
+    fn instropectInt(self: *@This()) Error!spec.IntTerm {
+        var term = spec.IntTerm.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+            switch (key) {
+                .value => term.value = try self.expectInt("I need a int tho"),
+                .location => term.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        return term;
+    }
+
+    fn instropectPrint(self: *@This()) Error!spec.Print {
+        var term = spec.Print.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+            switch (key) {
+                .value => term.value = try self.instropectTerm(),
+
+                .location => term.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        return term;
+    }
+    fn instropectVar(self: *@This()) Error!spec.Var {
+        var term = spec.Var.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+            switch (key) {
+                .text => term.text = try self.expectString("expecting a referal variable name"),
+                .location => term.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        return term;
+    }
+
+    fn instropectBinary(self: *@This()) Error!spec.Binary {
+        var binary = spec.Binary.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+
+            log.debug("binary: {any}", .{key});
+
+            switch (key) {
+                .op => {
+                    binary.op = try self.instropectBinaryOperation();
+                    continue;
+                },
+                .rhs => binary.rhs = try self.instropectTerm(),
+                .lhs => binary.lhs = try self.instropectTerm(),
+                .location => binary.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        return binary;
+    }
+
+    fn instropectBinaryOperation(self: *@This()) Error!spec.BinaryOp {
+        const rawBinaryOp = try self.expectString("expected a op:string found nothing instead.");
+        return std.meta.stringToEnum(spec.BinaryOp, rawBinaryOp) orelse Error.NoValueFound;
+    }
+
+    fn instropectIf(self: *@This()) Error!spec.If {
+        var dasIf = spec.If.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+
+            log.debug("if: {any}", .{key});
+
+            switch (key) {
+                .condition => dasIf.condition = try self.instropectTerm(),
+                .then => dasIf.then = try self.instropectTerm(),
+                .otherwise => dasIf.then = try self.instropectTerm(),
+                .location => dasIf.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        return dasIf;
+    }
+
+    fn instropectCall(self: *@This()) Error!spec.Call {
+        var call = spec.Call.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+
+            switch (key) {
+                .arguments => try self.parseCallArguments(&call.arguments),
+                .callee => call.callee = try self.instropectTerm(),
+                .location => call.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        try self.traverse();
+
+        return call;
     }
 
     fn instropectFunction(self: *@This()) Error!spec.Function {
@@ -166,7 +336,7 @@ pub const AstReader = struct {
             }
         }
 
-        try self.expectTreeEnd();
+        try self.traverse();
 
         return func;
     }
@@ -183,6 +353,18 @@ pub const AstReader = struct {
         try self.expect(.array_end);
     }
 
+    fn parseCallArguments(self: *@This(), params: *spec.Call.Arguments) Error!void {
+        try self.expect(.array_begin);
+
+        while (!try self.isArrayFinished()) {
+            const res = try self.instropectTerm();
+            var node = spec.Call.Arguments.Node{ .data = res };
+            params.prepend(&node);
+        }
+
+        try self.expect(.array_end);
+    }
+
     fn instropectLet(self: *@This()) Error!spec.Let {
         var let = spec.Let{
             .location = spec.Location.empty(),
@@ -193,7 +375,7 @@ pub const AstReader = struct {
 
         while (!try self.isTreeFinished()) {
             const key = try self.expectKey();
-            log.debug("--> {any}", .{key});
+            log.debug("let: {any}", .{key});
 
             switch (key) {
                 .name => let.name = try self.instropectParameter(),
@@ -261,7 +443,7 @@ pub const AstReader = struct {
         const strKey = try self.expectString("expected a key.");
 
         return strAsKey(strKey) orelse {
-            log.err("unexpected key: {s}", .{strKey});
+            log.err("keyReader: unexpected key: {s}", .{strKey});
             return Error.InvalidKey;
         };
     }
@@ -334,5 +516,18 @@ pub const AstReader = struct {
         }
 
         return true;
+    }
+
+    pub fn parseEntire(parentAllocator: mem.Allocator, runtime: *rt.Runtime, reader: std.fs.File.Reader) !AstReader {
+        var arena = std.heap.ArenaAllocator.init(parentAllocator);
+        var alloc = arena.allocator();
+        defer arena.deinit();
+
+        var astReader = AstReader.fromFile(alloc, runtime, reader);
+        defer astReader.deinit();
+
+        while (try astReader.next()) {}
+
+        return astReader;
     }
 };

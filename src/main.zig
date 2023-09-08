@@ -34,9 +34,5 @@ pub fn main() !void {
 
     var reader = inputFile.reader();
 
-    var astReader = AstReader.fromFile(gpa, &runtime, reader);
-
-    defer astReader.deinit();
-
-    while (try astReader.next()) {}
+    _ = try AstReader.parseEntire(gpa, &runtime, reader);
 }

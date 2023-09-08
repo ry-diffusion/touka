@@ -1,5 +1,7 @@
 const std = @import("std");
-pub const TermKind = enum { Let, Function };
+pub const TermKind = enum { Let, Function, If, Binary, Var, Int, Call, Print };
+pub const BinaryOp = enum { Add, Sub, Mul, Div, Rem, Eq, Neq, Lt, Gt, Lte, Gte, And, Or };
+
 pub const KeyName = enum {
     kind,
     value,
@@ -7,9 +9,16 @@ pub const KeyName = enum {
     text,
     then,
     location,
+    condition,
+    otherwise,
     next,
     start,
     end,
+    lhs,
+    rhs,
+    op,
+    callee,
+    arguments,
     parameters,
     filename,
 };
@@ -28,6 +37,32 @@ pub const Location = struct {
     }
 };
 pub const Parameter = struct { text: []const u8, location: Location };
+pub const Call = struct {
+    callee: Term,
+
+    arguments: Arguments,
+    location: Location,
+
+    pub const Arguments = std.SinglyLinkedList(Term);
+
+    pub fn empty() Call {
+        return Call{
+            .arguments = Arguments{},
+            .callee = Term.nil(),
+            .location = Location.empty(),
+        };
+    }
+};
+
+pub const Print = struct {
+    location: Location,
+    value: Term,
+
+    pub fn empty() Print {
+        return Print{ .location = Location.empty(), .value = Term.nil() };
+    }
+};
+
 pub const Function = struct {
     parameters: Parameters,
     value: Term,
@@ -43,11 +78,67 @@ pub const Function = struct {
         };
     }
 };
+
 pub const Let = struct { name: Parameter, value: Term, next: Term, location: Location };
+pub const IntTerm = struct {
+    value: i32,
+    location: Location,
+
+    pub fn empty() IntTerm {
+        return IntTerm{ .value = -1, .location = Location.empty() };
+    }
+};
+
+pub const If = struct {
+    condition: Term,
+    then: Term,
+    otherwise: Term,
+    location: Location,
+
+    pub fn empty() If {
+        return If{
+            .condition = Term.nil(),
+            .then = Term.nil(),
+            .otherwise = Term.nil(),
+            .location = Location.empty(),
+        };
+    }
+};
+
+pub const Var = struct {
+    text: []const u8,
+    location: Location,
+
+    pub fn empty() Var {
+        return Var{ .text = "", .location = Location.empty() };
+    }
+};
+
+pub const Binary = struct {
+    op: BinaryOp,
+    lhs: Term,
+    rhs: Term,
+    location: Location,
+
+    pub fn empty() Binary {
+        return Binary{
+            .op = BinaryOp.Eq,
+            .lhs = Term.nil(),
+            .rhs = Term.nil(),
+            .location = Location.empty(),
+        };
+    }
+};
 
 pub const Term = union(enum) {
     function: *Function,
     let: *Let,
+    ifTerm: *If,
+    varTerm: *Var,
+    binary: *Binary,
+    int: IntTerm,
+    call: *Call,
+    print: *Print,
     nil: ?void,
 
     pub fn nil() Term {
