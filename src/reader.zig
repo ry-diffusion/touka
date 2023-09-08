@@ -103,15 +103,9 @@ pub const AstReader = struct {
             const key = try self.expectKey();
 
             switch (key) {
-                .start => {
-                    loc.start = try self.expectInt("expected location.start as a integer.");
-                },
-                .end => {
-                    loc.end = try self.expectInt("expected location.end as a integer");
-                },
-                .filename => {
-                    loc.filename = try self.expectString("expected location.filename as a string");
-                },
+                .start => loc.start = try self.expectInt("expected location.start as a integer."),
+                .end => loc.end = try self.expectInt("expected location.end as a integer"),
+                .filename => loc.filename = try self.expectString("expected location.filename as a string"),
                 else => return Error.InvalidKey,
             }
         }
@@ -180,8 +174,6 @@ pub const AstReader = struct {
                 .location => let.location = try self.instropectLocation(),
                 else => return Error.InvalidKey,
             }
-
-            try self.expectNextObjext();
         }
 
         return let;
@@ -193,11 +185,6 @@ pub const AstReader = struct {
 
     fn strAsKey(str: []const u8) ?spec.KeyName {
         return std.meta.stringToEnum(spec.KeyName, str);
-    }
-
-    fn expectNextObjext(self: *@This()) Error!void {
-        _ = self;
-        // while (self.source.peekNextTokenType() catch std.json.TokenType.end_of_document ==
     }
 
     fn expectTreeEnd(self: *@This()) Error!void {

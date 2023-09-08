@@ -12,6 +12,7 @@ pub fn main() !void {
 
     // 640 KiB
     general_purpose_allocator.setRequestedMemoryLimit(640 * 1024);
+    defer std.log.info("requested {} bytes during execution.", .{general_purpose_allocator.total_requested_bytes});
 
     const gpa = general_purpose_allocator.allocator();
 
