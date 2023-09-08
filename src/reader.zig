@@ -1,10 +1,12 @@
 const std = @import("std");
 const spec = @import("spec.zig");
 const rt = @import("doppelganger/runtime.zig");
+const box = @import("mem.zig").box;
 const mem = std.mem;
 const AllocWhen = std.json.AllocWhen;
-const ReaderStage = enum { readingRoot, readingAst };
-pub const Error = error{
+const ReaderStage = enum { readingRoot, readingInitialAst, readingAst };
+
+pub const ParseError = error{
     TypeMismatch,
     NoValueFound,
     InvalidKey,
@@ -12,11 +14,14 @@ pub const Error = error{
     Unimplemented,
 };
 
+pub const Error = (ParseError || std.json.Scanner.NextError);
+
 pub const AstReader = struct {
     runtime: *rt.Runtime,
     stage: ReaderStage,
     alloc: mem.Allocator,
     source: std.json.Reader(std.json.default_buffer_size, std.fs.File.Reader),
+
     const log = std.log.scoped(.astReader);
 
     pub fn fromFile(alloc: std.mem.Allocator, runtime: *rt.Runtime, reader: std.fs.File.Reader) AstReader {
@@ -51,16 +56,16 @@ pub const AstReader = struct {
         }
     }
 
-    fn readRootStringManifest(self: *@This(), str: []const u8) !void {
+    fn readRootStringManifest(self: *@This(), str: []const u8) Error!void {
         if (mem.eql(u8, str, "name")) {
             const vmName = try self.expectString("root:name must be not empty.");
             try self.runtime.setSourceName(vmName);
         } else if (mem.eql(u8, str, "expression")) {
-            self.stage = .readingAst;
+            self.stage = .readingInitialAst;
         }
     }
 
-    fn instropectEntry(self: *@This(), str: []const u8) !void {
+    fn instropectEntry(self: *@This(), str: []const u8) Error!void {
         log.debug("ast.root: {s}", .{str});
 
         const key = strAsKey(str) orelse {
@@ -70,12 +75,19 @@ pub const AstReader = struct {
 
         switch (key) {
             .kind => {
-                const term = try self.expectTerm();
-                log.debug("found term: {any}", .{term});
+                const term = try self.instropectTerm();
 
                 switch (term) {
-                    .Let => return try self.instropectLet(),
-                    .Function => return Error.Unimplemented,
+                    .let => |let| {
+                        log.debug("oi {any}", .{let});
+                        self.alloc.destroy(let);
+                    },
+
+                    .function => |func| {
+                        self.alloc.destroy(func);
+                    },
+
+                    .nil => {},
                 }
             },
 
@@ -83,7 +95,7 @@ pub const AstReader = struct {
         }
     }
 
-    fn instropectLocation(self: *@This()) !spec.Location {
+    fn instropectLocation(self: *@This()) Error!spec.Location {
         try self.expectTreeStart();
         var loc = spec.Location{ .start = 0, .end = 0, .filename = "" };
 
@@ -104,12 +116,14 @@ pub const AstReader = struct {
             }
         }
 
+        try self.expectTreeEnd();
         return loc;
     }
 
-    fn instropectParameter(self: *@This()) !spec.Parameter {
-        var param = spec.Parameter{ .location = spec.Location{ .start = 0, .end = 0, .filename = "" }, .text = "" };
+    fn instropectParameter(self: *@This()) Error!spec.Parameter {
         try self.expectTreeStart();
+
+        var param = spec.Parameter{ .location = spec.Location.empty(), .text = "" };
 
         while (!try self.isTreeFinished()) {
             const key = try self.expectKey();
@@ -121,27 +135,56 @@ pub const AstReader = struct {
             }
         }
 
+        try self.expectTreeEnd();
+
         return param;
     }
 
-    fn instropectLet(self: *@This()) !void {
+    fn instropectTerm(self: *@This()) Error!spec.Term {
+        if (self.stage == .readingInitialAst) {
+            self.stage = .readingAst;
+        } else {
+            try self.expectTreeStart();
+            _ = try self.expectKey();
+        }
+
+        const kind = try self.expectTerm();
+
+        switch (kind) {
+            .Let => return spec.Term{ .let = try box(self.alloc, spec.Let, try self.instropectLet()) },
+            .Function => return spec.Term{ .function = try box(self.alloc, spec.Function, try self.instropectFunction()) },
+        }
+    }
+
+    fn instropectFunction(self: *@This()) Error!spec.Function {
+        _ = self;
+        return Error.Unimplemented;
+    }
+
+    fn instropectLet(self: *@This()) Error!spec.Let {
+        var let = spec.Let{
+            .location = spec.Location.empty(),
+            .name = spec.Parameter{ .location = spec.Location.empty(), .text = "" },
+            .next = spec.Term.nil(),
+            .value = spec.Term.nil(),
+        };
+
         while (!try self.isTreeFinished()) {
             const key = try self.expectKey();
             log.debug("--> {any}", .{key});
 
             switch (key) {
-                .name => {
-                    const param = try self.instropectParameter();
-                    log.debug("{any}", .{param});
-                },
-                .value => {},
-                .next => {},
-                .location => {
-                    _ = try self.instropectLocation();
-                },
+                .name => let.name = try self.instropectParameter(),
+                .value => let.value = try self.instropectTerm(),
+                .next => let.next = try self.instropectTerm(),
+                .location => let.location = try self.instropectLocation(),
                 else => return Error.InvalidKey,
             }
+
+            try self.expectNextObjext();
         }
+
+        return let;
     }
 
     fn strAsTerm(str: []const u8) ?spec.TermKind {
@@ -150,6 +193,26 @@ pub const AstReader = struct {
 
     fn strAsKey(str: []const u8) ?spec.KeyName {
         return std.meta.stringToEnum(spec.KeyName, str);
+    }
+
+    fn expectNextObjext(self: *@This()) Error!void {
+        _ = self;
+        // while (self.source.peekNextTokenType() catch std.json.TokenType.end_of_document ==
+    }
+
+    fn expectTreeEnd(self: *@This()) Error!void {
+        const token = self.source.next() catch {
+            log.err("Expected a }}  found nothing instead", .{});
+            return Error.NoValueFound;
+        };
+
+        switch (token) {
+            .object_end => {},
+            else => |e| {
+                log.err("Expected a }} found {any} instead", .{e});
+                return Error.TypeMismatch;
+            },
+        }
     }
 
     fn expectTreeStart(self: *@This()) Error!void {
@@ -201,8 +264,11 @@ pub const AstReader = struct {
         };
     }
 
-    fn isTreeFinished(self: *@This()) !bool {
-        switch (try self.source.peekNextTokenType()) {
+    fn isTreeFinished(self: *@This()) Error!bool {
+        switch (self.source.peekNextTokenType() catch |e| {
+            log.err("parse error: {any}", .{e});
+            return Error.SyntaxError;
+        }) {
             .object_begin, .object_end, .end_of_document => return true,
             else => return false,
         }
@@ -218,13 +284,14 @@ pub const AstReader = struct {
             .string => |str| {
                 switch (self.stage) {
                     .readingRoot => try self.readRootStringManifest(str),
-                    .readingAst => try self.instropectEntry(str),
+                    .readingInitialAst, .readingAst => try self.instropectEntry(str),
                 }
             },
 
             .end_of_document => return false,
             .null => return true,
-            else => {
+            else => |i| {
+                log.debug("ignoring {any}", .{i});
                 return false;
             },
         }
