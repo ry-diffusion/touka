@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -eux
+cd tcc
+
+./configure --with-libgcc --enable-static --cc="zig cc" 
+make ONE_SOURCE=yes tccdefs_.h

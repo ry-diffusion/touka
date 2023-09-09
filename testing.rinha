@@ -1,0 +1,18 @@
+let aiai = ("KKsKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK, 0);
+let iCanChange = "hey";
+let IcanAlsoDoIt = 2;
+let unknownTuple = ("bom dia minina do café", 0);
+let unitfy = fn (it) => {
+    if (it) {
+        iCanChange
+    } else {
+        IcanAlsoDoIt
+    }
+};
+let coolMath = 23 + 74;
+let sum = unitfy (true) + unitfy (false);
+let inTheEnd = (sum, 2);
+let _ = print(sum);
+let _ = print(inTheEnd); 
+let _ = print("OK");
+true

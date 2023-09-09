@@ -1,27 +1,20 @@
 const std = @import("std");
-pub const TermKind = enum { Let, Function, If, Binary, Var, Int, Call, Print };
-pub const BinaryOp = enum { Add, Sub, Mul, Div, Rem, Eq, Neq, Lt, Gt, Lte, Gte, And, Or };
-
-pub const KeyName = enum {
-    kind,
-    value,
-    name,
-    text,
-    then,
-    location,
-    condition,
-    otherwise,
-    next,
-    start,
-    end,
-    lhs,
-    rhs,
-    op,
-    callee,
-    arguments,
-    parameters,
-    filename,
+pub const TermKind = enum {
+    Let,
+    Function,
+    If,
+    Binary,
+    Var,
+    Int,
+    Call,
+    Print,
+    Str,
+    Tuple,
+    Bool,
 };
+
+pub const BinaryOp = enum { Add, Sub, Mul, Div, Rem, Eq, Neq, Lt, Gt, Lte, Gte, And, Or };
+pub const KeyName = enum { kind, value, name, text, then, location, condition, otherwise, next, start, end, lhs, rhs, op, callee, arguments, parameters, filename, first, second };
 
 pub const Location = struct {
     start: Int,
@@ -105,6 +98,41 @@ pub const If = struct {
     }
 };
 
+pub const Str = struct {
+    value: []const u8,
+    location: Location,
+
+    pub fn empty() Str {
+        return Str{ .value = "", .location = Location.empty() };
+    }
+};
+
+pub const Bool = struct {
+    value: bool,
+    location: Location,
+
+    pub fn empty() Bool {
+        return Bool{
+            .value = false,
+            .location = Location.empty(),
+        };
+    }
+};
+
+pub const Tuple = struct {
+    first: Term,
+    second: Term,
+    location: Location,
+
+    pub fn empty() Tuple {
+        return Tuple{
+            .first = Term.nil(),
+            .second = Term.nil(),
+            .location = Location.empty(),
+        };
+    }
+};
+
 pub const Var = struct {
     text: []const u8,
     location: Location,
@@ -137,8 +165,11 @@ pub const Term = union(enum) {
     varTerm: *Var,
     binary: *Binary,
     int: IntTerm,
+    str: Str,
+    boolean: Bool,
     call: *Call,
     print: *Print,
+    tuple: *Tuple,
     nil: ?void,
 
     pub fn nil() Term {

@@ -46,7 +46,7 @@ pub const AstReader = struct {
             return Error.SyntaxError;
         }) == std.json.TokenType.object_end) {
             self.howDeep += 1;
-            log.info("howDeep: {}", .{self.howDeep});
+            log.debug("depth: {}", .{self.howDeep});
 
             _ = self.source.next() catch {
                 return Error.SyntaxError;
@@ -57,17 +57,34 @@ pub const AstReader = struct {
     }
 
     fn expectString(self: *@This(), why: []const u8) Error![]const u8 {
-        const item = self.source.next() catch {
+        const item = self.source.nextAlloc(self.alloc, std.json.AllocWhen.alloc_if_needed) catch {
             log.err("expected a string: {s}", .{why});
             return Error.NoValueFound;
         };
 
         switch (item) {
-            .allocated_string => return Error.Unimplemented,
+            .allocated_string => |s| return s,
             .string => |s| return s,
 
             else => |i| {
                 log.err("expected a string, found {any}", .{i});
+                return Error.TypeMismatch;
+            },
+        }
+    }
+
+    fn expectBool(self: *@This(), why: []const u8) Error!bool {
+        const item = self.source.next() catch {
+            log.err("expected a boolean: {s}", .{why});
+            return Error.NoValueFound;
+        };
+
+        switch (item) {
+            .true => return true,
+            .false => return false,
+
+            else => |i| {
+                log.err("expected a boolean, found {any}", .{i});
                 return Error.TypeMismatch;
             },
         }
@@ -98,6 +115,20 @@ pub const AstReader = struct {
                     .let => |let| {
                         log.debug("definindo {any}", .{let});
                         self.alloc.destroy(let);
+                    },
+
+                    .boolean => |boo| {
+                        log.debug("booleano {any}", .{boo});
+                    },
+
+                    .tuple => |t| {
+                        log.debug("bota um halls na lingua amor: ({any}, {any})", .{ t.first, t.second });
+                        self.alloc.destroy(t);
+                    },
+
+                    .str => |opa| {
+                        log.debug("string {s}", .{opa.value});
+                        // self.alloc.destroy(opa.value.ptr);
                     },
 
                     .print => |p| {
@@ -201,7 +232,10 @@ pub const AstReader = struct {
         var term = spec.Term.nil();
 
         switch (kind) {
+            .Bool => term = spec.Term{ .boolean = try self.instropectBoolean() },
+            .Str => term = spec.Term{ .str = try self.instropectStr() },
             .Int => term = spec.Term{ .int = try self.instropectInt() },
+            .Tuple => term = spec.Term{ .tuple = try box(self.alloc, spec.Tuple, try self.instropectTuple()) },
             .Print => term = spec.Term{ .print = try box(self.alloc, spec.Print, try self.instropectPrint()) },
             .Var => term = spec.Term{ .varTerm = try box(self.alloc, spec.Var, try self.instropectVar()) },
             .Call => term = spec.Term{ .call = try box(self.alloc, spec.Call, try self.instropectCall()) },
@@ -215,6 +249,36 @@ pub const AstReader = struct {
         return term;
     }
 
+    fn instropectBoolean(self: *@This()) Error!spec.Bool {
+        var term = spec.Bool.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+            switch (key) {
+                .value => term.value = try self.expectBool("I need a str tho"),
+                .location => term.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        return term;
+    }
+
+    fn instropectStr(self: *@This()) Error!spec.Str {
+        var term = spec.Str.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+            switch (key) {
+                .value => term.value = try self.expectString("I need a str tho"),
+                .location => term.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        return term;
+    }
+
     fn instropectInt(self: *@This()) Error!spec.IntTerm {
         var term = spec.IntTerm.empty();
 
@@ -222,6 +286,22 @@ pub const AstReader = struct {
             const key = try self.expectKey();
             switch (key) {
                 .value => term.value = try self.expectInt("I need a int tho"),
+                .location => term.location = try self.instropectLocation(),
+                else => return Error.Unimplemented,
+            }
+        }
+
+        return term;
+    }
+
+    fn instropectTuple(self: *@This()) Error!spec.Tuple {
+        var term = spec.Tuple.empty();
+
+        while (!try self.isTreeFinished()) {
+            const key = try self.expectKey();
+            switch (key) {
+                .first => term.first = try self.instropectTerm(),
+                .second => term.second = try self.instropectTerm(),
                 .location => term.location = try self.instropectLocation(),
                 else => return Error.Unimplemented,
             }

@@ -17,14 +17,14 @@ pub const State = struct {
         var s = State{
             .code = null,
             .alloc = alloc,
+
             .compilerState = c.tcc_new() orelse {
                 return Error.TccInitError;
             },
         };
 
-        if (c.tcc_set_output_type(s.compilerState, c.TCC_OUTPUT_MEMORY) != 0) {
+        if (c.tcc_set_output_type(s.compilerState, c.TCC_OUTPUT_MEMORY) != 0)
             return Error.SetOptionFailed;
-        }
 
         return s;
     }

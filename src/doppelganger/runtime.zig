@@ -12,20 +12,26 @@ pub const Runtime = struct {
     const log = std.log.scoped(.doppelganger);
 
     pub fn init(alloc: std.mem.Allocator) !Runtime {
-        return Runtime{
+        var rt = Runtime{
             .alloc = alloc,
             .engine = try engine.State.init(alloc),
         };
+
+        rt.engine.set("DOPPELGANGER_SOURCE_NAME", "<nofile>");
+        return rt;
     }
 
     pub fn setSourceName(self: *@This(), to: t.String) !void {
         self.sourceName = try self.alloc.alloc(u8, to.len);
+        @memcpy(self.sourceName.?, to);
+
         self.engine.set("DOPPELGANGER_SOURCE_NAME", to);
         log.info("set name to {s}", .{self.sourceName.?});
     }
 
     pub fn deinit(self: *@This()) void {
         self.engine.deinit();
+
         if (self.sourceName) |name| {
             self.alloc.free(name);
         }

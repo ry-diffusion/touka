@@ -11,10 +11,8 @@ pub fn main() !void {
 
     // 640 KiB
     general_purpose_allocator.setRequestedMemoryLimit(640 * 1024);
-    defer std.log.info("requested {} bytes during execution.", .{general_purpose_allocator.total_requested_bytes});
 
     const gpa = general_purpose_allocator.allocator();
-
     defer std.debug.assert(general_purpose_allocator.deinit() == .ok);
 
     var argv = std.process.args();
@@ -25,20 +23,17 @@ pub fn main() !void {
     };
 
     const absolutePath = try std.fs.realpathAlloc(gpa, fileName);
-    defer gpa.free(absolutePath);
 
     const inputFile = try fs.openFileAbsolute(absolutePath, .{ .mode = std.fs.File.OpenMode.read_only });
     defer inputFile.close();
+    gpa.free(absolutePath);
 
     var runtime = try dpplgngr.Runtime.init(gpa);
-    defer runtime.deinit();
 
     var reader = inputFile.reader();
+    defer runtime.deinit();
 
     _ = try AstReader.parseEntire(gpa, &runtime, reader);
-}
 
-fn show(a: [*c]u8) callconv(.C) void {
-    const text: [:0]u8 = std.mem.span(a);
-    std.log.err("from jit: {s}", .{text});
+    std.log.info("requested {} bytes during execution.", .{general_purpose_allocator.total_requested_bytes});
 }
