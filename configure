@@ -3,4 +3,5 @@ set -eux
 cd tcc
 
 ./configure --with-libgcc --enable-static --cc="zig cc" 
-make ONE_SOURCE=yes tccdefs_.h
+zig cc -O2 -flto -DC2STR conftest.c -o c2str.exe 
+./c2str.exe include/tccdefs.h tccdefs_.h
