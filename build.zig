@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) !void {
     var tccPlat = [_:0]u8{undefined} ** 64;
 
     switch (b.host.target.cpu.arch) {
-        .x86_64 => std.mem.copyForwards(u8, &tccPlat, "-DTCC_TARGET_X86_64"),
+        .x86_64 => std.mem.copyForwards(u8, &tccPlat, "-DTCC_TARGET_X86_64 -DCONFIG_LDDIR=lib64"),
         .x86 => std.mem.copyForwards(u8, &tccPlat, "-DTCC_TARGET_I386"),
         .arm => std.mem.copyForwards(u8, &tccPlat, "-DTCC_TARGET_ARM"),
         else => std.debug.panic("incompatible platform! only x86_(64) and arm are supported.", .{}),
@@ -55,7 +55,11 @@ pub fn build(b: *std.Build) !void {
         .file = std.build.LazyPath.relative("./tcc/libtcc.c"),
         .flags = &[_][]const u8{
             &tccPlat,
-            "-DCONFIG_TCC_STATIC",
+            "-DTCC_STATIC",
+            "-DUSE_LIBGCC",
+            \\-DTCC_LIBTCC1=""
+            ,
+            "-fheinous-gnu-extensions",
             "-fno-strict-aliasing",
             "-fno-sanitize=undefined",
             "-Wno-pointer-sign",

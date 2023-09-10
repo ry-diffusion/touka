@@ -33,6 +33,15 @@ pub const Runtime = struct {
         log.info("set name to {s}", .{self.sourceName.?});
     }
 
+    inline fn showInstropectLog(item: anytype) void {
+        log.debug("converting {s} at {s}:{}:{}", .{
+            @typeName(@TypeOf(item)),
+            item.location.filename,
+            item.location.start,
+            item.location.end,
+        });
+    }
+
     pub fn pushRoot(self: *Self, term: spec.Term) !void {
         if (self.nuclearFlags.forceNoop == t.NuclearFlags.enabled) {
             log.debug("NuclearFlags: noop marked.", .{});
@@ -40,6 +49,10 @@ pub const Runtime = struct {
         }
 
         switch (term) {
+            .let => |let| {
+                showInstropectLog(let);
+            },
+
             .boolean => |it| {
                 _ = it;
             },

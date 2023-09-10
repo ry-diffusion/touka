@@ -34,12 +34,13 @@ test "Doppelgänger engine - use zig native interfaces" {
     try jit.insertSymbol("printString", show);
 
     try jit.compile(
+        \\ extern void printString(char*);
         \\ struct ZigData {
         \\  int ok;
         \\  char* data;
         \\ };
         \\
-        \\ int AppInit(struct ZigData* zd)
+        \\ void AppInit(struct ZigData* zd)
         \\ {
         \\     zd->ok = 1;
         \\     printString(zd->data);

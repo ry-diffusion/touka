@@ -11,11 +11,9 @@ pub const Error = error{ TccInitError, TccCompileFailed, RunFailed, UnableToInse
 pub const State = struct {
     compilerState: *c.TCCState,
     alloc: std.mem.Allocator,
-    code: ?[]u8,
 
     pub fn init(alloc: std.mem.Allocator) Error!State {
         var s = State{
-            .code = null,
             .alloc = alloc,
 
             .compilerState = c.tcc_new() orelse {
@@ -36,17 +34,15 @@ pub const State = struct {
     }
 
     pub fn run(self: *@This()) !void {
-        if (c.tcc_run(self.compilerState, 0, null) != 0) {
+        if (c.tcc_run(self.compilerState, 0, null) != 0)
             return Error.RunFailed;
-        }
     }
 
     pub fn insertSymbol(self: *@This(), name: []const u8, func: *const anyopaque) !void {
         var cFunc = @as(?*anyopaque, @ptrFromInt(@intFromPtr(func)));
 
-        if (c.tcc_add_symbol(self.compilerState, @ptrCast(name), cFunc) != 0) {
+        if (c.tcc_add_symbol(self.compilerState, @ptrCast(name), cFunc) != 0)
             return Error.UnableToInsertSymbol;
-        }
     }
 
     pub fn set(self: *@This(), name: []const u8, value: []const u8) void {
@@ -62,14 +58,7 @@ pub const State = struct {
         if (size < 0)
             return Error.UnableToReallocate;
 
-        if (self.code) |code|
-            self.code = try self.alloc.realloc(code, @intCast(size))
-        else
-            self.code = try self.alloc.alloc(u8, @intCast(size));
-
-        var cCode = @as(?*anyopaque, @ptrFromInt(@intFromPtr(self.code.?.ptr)));
-
-        if (c.tcc_relocate(self.compilerState, cCode) < 0)
+        if (c.tcc_relocate(self.compilerState, c.TCC_RELOCATE_AUTO) < 0)
             return Error.UnableToReallocate;
     }
 
@@ -80,9 +69,6 @@ pub const State = struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        if (self.code) |code| {
-            self.alloc.free(code);
-        }
         c.tcc_delete(self.compilerState);
     }
 };
