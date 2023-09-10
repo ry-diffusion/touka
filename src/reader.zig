@@ -1,6 +1,8 @@
 const std = @import("std");
 const spec = @import("spec.zig");
 const rt = @import("doppelganger/runtime.zig");
+const rtTypes = @import("doppelganger/types.zig");
+const NuclearFlags = rtTypes.NuclearFlags;
 const box = @import("mem.zig").box;
 const mem = std.mem;
 const AllocWhen = std.json.AllocWhen;
@@ -99,7 +101,7 @@ pub const AstReader = struct {
         }
     }
 
-    fn instropectEntry(self: *@This(), str: []const u8) Error!void {
+    fn instropectNode(self: *@This(), str: []const u8) Error!void {
         log.debug("ast.root: {s}", .{str});
 
         const key = strAsKey(str) orelse {
@@ -114,20 +116,24 @@ pub const AstReader = struct {
                 switch (term) {
                     .let => |let| {
                         log.debug("definindo {any}", .{let});
+                        try self.runtime.pushRoot(term);
                         self.alloc.destroy(let);
                     },
 
                     .boolean => |boo| {
                         log.debug("booleano {any}", .{boo});
+                        try self.runtime.pushRoot(term);
                     },
 
                     .tuple => |t| {
                         log.debug("bota um halls na lingua amor: ({any}, {any})", .{ t.first, t.second });
+                        try self.runtime.pushRoot(term);
                         self.alloc.destroy(t);
                     },
 
                     .str => |opa| {
                         log.debug("string {s}", .{opa.value});
+                        try self.runtime.pushRoot(term);
                         // self.alloc.destroy(opa.value.ptr);
                     },
 
@@ -312,6 +318,7 @@ pub const AstReader = struct {
 
     fn instropectPrint(self: *@This()) Error!spec.Print {
         var term = spec.Print.empty();
+        self.runtime.nuclearFlags.forceNoop = NuclearFlags.disabled;
 
         while (!try self.isTreeFinished()) {
             const key = try self.expectKey();
@@ -589,7 +596,7 @@ pub const AstReader = struct {
             .string => |str| {
                 switch (self.stage) {
                     .readingRoot => try self.readRootStringManifest(str),
-                    .readingInitialAst, .readingAst => try self.instropectEntry(str),
+                    .readingInitialAst, .readingAst => try self.instropectNode(str),
                 }
             },
 
