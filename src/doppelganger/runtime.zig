@@ -17,7 +17,7 @@ pub const Runtime = struct {
     pub fn init(alloc: std.mem.Allocator) !Runtime {
         var rt = Runtime{
             .alloc = alloc,
-            .engine = try engine.State.init(alloc),
+            .engine = try engine.State.init(),
             .nuclearFlags = t.NuclearFlags.empty(),
         };
 

@@ -10,12 +10,9 @@ pub const Error = error{ TccInitError, TccCompileFailed, RunFailed, UnableToInse
 
 pub const State = struct {
     compilerState: *c.TCCState,
-    alloc: std.mem.Allocator,
 
-    pub fn init(alloc: std.mem.Allocator) Error!State {
+    pub fn init() Error!State {
         var s = State{
-            .alloc = alloc,
-
             .compilerState = c.tcc_new() orelse {
                 return Error.TccInitError;
             },
