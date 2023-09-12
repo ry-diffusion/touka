@@ -12,7 +12,7 @@ fn show(a: [*c]u8) callconv(.C) void {
 }
 
 test "Doppelgänger engine - basic compile and run" {
-    var jit = try engine.State.init(std.testing.allocator);
+    var jit = try engine.State.init();
     defer jit.deinit();
 
     try jit.compile(
@@ -26,7 +26,7 @@ test "Doppelgänger engine - basic compile and run" {
 }
 
 test "Doppelgänger engine - use zig native interfaces" {
-    var jit = try engine.State.init(std.testing.allocator);
+    var jit = try engine.State.init();
     defer jit.deinit();
     var oi = "oi";
     var hey = Hey{ .ok = false, .zigString = @constCast(oi) };
