@@ -6,14 +6,20 @@ const AstReader = @import("reader.zig").AstReader;
 const dpplgngr = @import("doppelganger/runtime.zig");
 const engine = @import("doppelganger/engine.zig");
 
+fn printMemoryInformations() void {
+    const c = @cImport({
+        @cInclude("malloc.h");
+    });
+
+    var info = c.mallinfo2();
+    const used = info.uordblks + info.hblkhd;
+
+    std.debug.print("debug(memoryInfo): used {d} bytes\n", .{used});
+}
+
 pub fn main() !void {
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .enable_memory_limit = true }){};
-
-    // 640 KiB
-    general_purpose_allocator.setRequestedMemoryLimit(640 * 1024);
-
-    const gpa = general_purpose_allocator.allocator();
-    defer std.debug.assert(general_purpose_allocator.deinit() == .ok);
+    const gpa = std.heap.c_allocator;
+    defer printMemoryInformations();
 
     var argv = std.process.args();
     _ = argv.next();
@@ -28,12 +34,10 @@ pub fn main() !void {
     defer inputFile.close();
     gpa.free(absolutePath);
 
-    var runtime = try dpplgngr.Runtime.init(gpa);
-
     var reader = inputFile.reader();
+
+    var runtime = try dpplgngr.Runtime.init(gpa);
     defer runtime.deinit();
 
     _ = try AstReader.parseEntire(gpa, &runtime, reader);
-
-    std.log.info("requested {} bytes during execution.", .{general_purpose_allocator.total_requested_bytes});
 }

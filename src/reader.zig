@@ -1,6 +1,7 @@
 const std = @import("std");
 const spec = @import("spec.zig");
 const rt = @import("doppelganger/runtime.zig");
+const rtEngine = @import("doppelganger/engine.zig");
 const rtTypes = @import("doppelganger/types.zig");
 const NuclearFlags = rtTypes.NuclearFlags;
 const box = @import("mem.zig").box;
@@ -16,7 +17,7 @@ pub const ParseError = error{
     Unimplemented,
 };
 
-pub const Error = (ParseError || std.json.Scanner.NextError);
+pub const Error = (rtEngine.Error || ParseError || std.json.Scanner.NextError);
 
 pub const AstReader = struct {
     runtime: *rt.Runtime,
@@ -59,7 +60,7 @@ pub const AstReader = struct {
     }
 
     fn expectString(self: *@This(), why: []const u8) Error![]const u8 {
-        const item = self.source.nextAlloc(self.alloc, std.json.AllocWhen.alloc_if_needed) catch {
+        const item = self.source.nextAlloc(self.alloc, std.json.AllocWhen.alloc_always) catch {
             log.err("expected a string: {s}", .{why});
             return Error.NoValueFound;
         };

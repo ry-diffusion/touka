@@ -4,5 +4,5 @@
 
 [submodule "tcc"]
 	path = tcc
-  url = https://github.com/TinyCC/tinycc
-  branch = mob
+	url = https://github.com/TinyCC/tinycc
+	branch = mob

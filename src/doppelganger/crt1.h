@@ -1,11 +1,13 @@
 // vi: ft=c
 
-#ifndef DOPPELGANGER_VALUES
-#define DOPPELGANGER_VALUES
+typedef unsigned char Boolean;
+typedef int Num;
+typedef char *Str;
 
-typedef struct Object {
-  void *ref;
-  void (*sum)(struct Object *result, struct Object *a, struct Object *b);
-} CoreObj;
+const Boolean E_1 = 1;
+const Boolean E_2 = 0;
 
-#endif
+/* Core libs */
+extern void printString(Str *out, Str content);
+extern void printNum(Str *out, Num content);
+extern void printBool(Str *out, Boolean content);
