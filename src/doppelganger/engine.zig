@@ -4,13 +4,17 @@ pub const c = @cImport({
     @cDefine("_NO_CRT_STDIO_INLINE", "1");
 
     @cInclude("libtcc.h");
-    @cInclude("stdio.h>");
+    @cInclude("uv.h");
 });
 
-pub const Error = error{ TccInitError, TccCompileFailed, RunFailed, UnableToInsertSymbol, SetOptionFailed, UnableToReallocate };
-fn damn(fmt: [*:0]const u8, args: anytype) void {
-    _ = @call(.auto, std.c.printf, .{fmt} ++ args);
-}
+pub const Error = error{
+    TccInitError,
+    TccCompileFailed,
+    RunFailed,
+    UnableToInsertSymbol,
+    SetOptionFailed,
+    UnableToReallocate,
+};
 
 pub const State = struct {
     compilerState: *c.TCCState,
@@ -18,23 +22,23 @@ pub const State = struct {
     const log = std.log.scoped(.engine);
 
     pub fn init() Error!State {
-        var s = State{
+        var state = State{
             .compilerState = c.tcc_new() orelse {
                 return Error.TccInitError;
             },
         };
 
-        if (c.tcc_set_output_type(s.compilerState, c.TCC_OUTPUT_MEMORY) != 0)
+        if (c.tcc_set_output_type(state.compilerState, c.TCC_OUTPUT_MEMORY) != 0)
             return Error.SetOptionFailed;
 
-        return s;
+        return state;
     }
 
     pub fn compile(self: *Self, source: []const u8) !void {
         log.debug("compiling {s}", .{source});
-        if (c.tcc_compile_string(self.compilerState, source.ptr) == -1) {
+
+        if (c.tcc_compile_string(self.compilerState, source.ptr) == -1)
             return Error.TccCompileFailed;
-        }
     }
 
     pub fn run(self: *Self) !void {

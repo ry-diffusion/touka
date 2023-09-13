@@ -17,7 +17,7 @@ pub const ParseError = error{
     Unimplemented,
 };
 
-pub const Error = (rtEngine.Error || ParseError || std.json.Scanner.NextError);
+pub const Error = (std.fs.File.WriteError || rtEngine.Error || ParseError || std.json.Scanner.NextError);
 
 pub const AstReader = struct {
     runtime: *rt.Runtime,
@@ -102,7 +102,7 @@ pub const AstReader = struct {
         }
     }
 
-    fn instropectNode(self: *@This(), str: []const u8) Error!void {
+    fn instropectNode(self: *@This(), str: []const u8) !void {
         log.debug("ast.root: {s}", .{str});
 
         const key = strAsKey(str) orelse {
@@ -624,7 +624,7 @@ pub const AstReader = struct {
         while (try astReader.next()) {}
 
         const elapsed = timer.read();
-        log.debug("read ast took: {}ms ({}us)", .{ elapsed / 1000 / 1000, elapsed / 1000 });
+        log.debug("gen file: {} ms ({} μs)", .{ elapsed / 1000 / 1000, elapsed / 1000 });
 
         return astReader;
     }

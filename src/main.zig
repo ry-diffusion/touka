@@ -14,7 +14,7 @@ fn printMemoryInformations() void {
     var info = c.mallinfo2();
     const used = info.uordblks + info.hblkhd;
 
-    std.debug.print("debug(memoryInfo): used {d} bytes\n", .{used});
+    std.debug.print("debug(memoryInfo): used {d} kB ({d}B) of memory.\n", .{ used / 1024, used });
 }
 
 pub fn main() !void {

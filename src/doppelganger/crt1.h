@@ -4,8 +4,19 @@ typedef unsigned char Boolean;
 typedef int Num;
 typedef char *Str;
 
-const Boolean E_1 = 1;
-const Boolean E_2 = 0;
+static const Boolean E_1 = 1;
+static const Boolean E_2 = 0;
+
+struct nUvWorkState {
+  void *data;
+};
+
+struct Tuple {
+  void *first;
+  void *second;
+};
+
+typedef void (*Function)(struct nUvWorkState *state);
 
 /* Core libs */
 extern void printString(Str *out, Str content);
