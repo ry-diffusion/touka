@@ -12,6 +12,7 @@ const jitKinds = enum {
     Str,
     Function,
     Tuple,
+    Lazy,
 
     pub fn toString(self: @This()) []const u8 {
         return switch (self) {
@@ -19,7 +20,8 @@ const jitKinds = enum {
             .Str => "Str",
             .Tuple => "struct Tuple",
             .Boolean => "Boolean",
-            .Function => "struct nUvWorkState *",
+            .Lazy => "Lazy",
+            .Function => "Function",
         };
     }
 };
@@ -28,6 +30,8 @@ const TuplePrimitive = struct {
     first: jitKinds,
     second: jitKinds,
 };
+
+const uvState = "struct nUvWorkState*";
 
 const jitTrue = "E_1";
 const jitFalse = "E_2";
@@ -41,7 +45,6 @@ pub const Runtime = struct {
     nuclearFlags: t.NuclearFlags,
     evalIdBuffer: EvaluationID,
     currentEvalId: t.Id,
-    tuples: Tuples,
     outputFile: std.fs.File,
     outputWriter: std.io.BufferedWriter(4096, std.fs.File.Writer),
 
@@ -56,7 +59,6 @@ pub const Runtime = struct {
             .nuclearFlags = t.NuclearFlags.empty(),
             .currentEvalId = 3,
             .evalIdBuffer = std.mem.zeroes([16]u8),
-            .tuples = Tuples.init(alloc),
             .outputWriter = std.io.bufferedWriter(outputFile.writer()),
             .outputFile = outputFile,
         };
@@ -116,9 +118,19 @@ pub const Runtime = struct {
             },
         );
 
-        // try self.tuples.put(TuplePrimitive{ .first = termToJitKind(first), .second = termToJitKind(second) }, self.requestEvaluationId());
-
         return self.requestEvaluationId();
+    }
+
+    inline fn push(self: *Self, fmt: []const u8, args: anytype) !void {
+        try std.fmt.format(self.outputWriter.writer(), fmt, args);
+    }
+
+    inline fn initFunction(self: *Self, name: []const u8) !void {
+        try self.push("void {s}(" ++ uvState ++ "state) {{", .{name});
+    }
+
+    inline fn finishFunction(self: *Self) !void {
+        try self.push("}}\n", .{});
     }
 
     fn insertEvaluation(self: *Self, term: spec.Term) !EvaluationID {
@@ -127,8 +139,7 @@ pub const Runtime = struct {
         switch (term) {
             .str => |v| {
                 showInstropectLog(v);
-                try std.fmt.format(
-                    self.outputWriter.writer(),
+                try self.push(
                     "static {s} {s} = \"{s}\";",
                     .{
                         jitKinds.Str.toString(),
@@ -140,8 +151,7 @@ pub const Runtime = struct {
 
             .int => |i| {
                 showInstropectLog(i);
-                try std.fmt.format(
-                    self.outputWriter.writer(),
+                try self.push(
                     "static {s} {s} = {};",
                     .{
                         jitKinds.Int32.toString(),
@@ -159,6 +169,25 @@ pub const Runtime = struct {
                 return try self.buildTuple(first, second);
             },
 
+            .print => |p| {
+                const resultId = self.requestEvaluationId();
+
+                try self.push("static {s}* {s} = None;", .{ jitKinds.Lazy.toString(), resultId });
+                try self.push("static {s}* {s} = None;", .{ jitKinds.Lazy.toString(), eId });
+
+                try self.initFunction(&self.requestEvaluationId());
+
+                switch (p.value) {
+                    .int => try self.push("printNum((Num**){s}, {s});", .{ resultId, try self.insertEvaluation(p.value) }),
+                    .str => try self.push("printStr((char**){s}, {s});", .{ resultId, try self.insertEvaluation(p.value) }),
+                    else => {
+                        log.warn("unimplemented: {any}", .{@tagName(p.value)});
+                    },
+                }
+
+                try self.finishFunction();
+            },
+
             else => |v| {
                 log.warn("unimplemented {any}", .{v});
             },
@@ -167,7 +196,7 @@ pub const Runtime = struct {
         return eId;
     }
 
-    pub fn pushRoot(self: *Self, term: spec.Term) !void {
+    pub fn insert(self: *Self, term: spec.Term) !void {
         if (self.nuclearFlags.forceNoop == t.NuclearFlags.enabled) {
             log.debug("NuclearFlags: noop marked.", .{});
             return;
@@ -177,6 +206,8 @@ pub const Runtime = struct {
             .let => |let| {
                 showInstropectLog(let);
                 const valueId = try self.insertEvaluation(let.value);
+                const next = try self.insert(let.next);
+                _ = next;
                 _ = valueId;
                 log.debug("Loading variable: {s}", .{let.name.text});
             },
@@ -193,7 +224,7 @@ pub const Runtime = struct {
 
     pub fn deinit(self: *Self) void {
         self.engine.deinit();
-        self.tuples.deinit();
+
         _ = self.outputWriter.flush() catch 0;
         self.outputFile.close();
     }

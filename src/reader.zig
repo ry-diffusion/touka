@@ -117,24 +117,24 @@ pub const AstReader = struct {
                 switch (term) {
                     .let => |let| {
                         log.debug("definindo {any}", .{let});
-                        try self.runtime.pushRoot(term);
+                        try self.runtime.insert(term);
                         self.alloc.destroy(let);
                     },
 
                     .boolean => |boo| {
                         log.debug("booleano {any}", .{boo});
-                        try self.runtime.pushRoot(term);
+                        try self.runtime.insert(term);
                     },
 
                     .tuple => |t| {
                         log.debug("bota um halls na lingua amor: ({any}, {any})", .{ t.first, t.second });
-                        try self.runtime.pushRoot(term);
+                        try self.runtime.insert(term);
                         self.alloc.destroy(t);
                     },
 
                     .str => |opa| {
                         log.debug("string {s}", .{opa.value});
-                        try self.runtime.pushRoot(term);
+                        try self.runtime.insert(term);
                         // self.alloc.destroy(opa.value.ptr);
                     },
 
