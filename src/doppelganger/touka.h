@@ -5,14 +5,9 @@ typedef int Num;
 typedef char *Str;
 typedef void *Lazy;
 
-const Lazy None = 0;
-
-static const Boolean E_1 = 1;
-static const Boolean E_2 = 0;
-
-struct nUvWorkState {
+typedef struct workState {
   void *data;
-};
+} WorkState;
 
 struct Tuple {
   void *first;
