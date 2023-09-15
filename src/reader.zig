@@ -1,6 +1,6 @@
 const std = @import("std");
 const spec = @import("spec.zig");
-const rt = @import("doppelganger/runtime.zig");
+const dp = @import("doppelganger/generator.zig");
 const rtEngine = @import("doppelganger/engine.zig");
 const rtTypes = @import("doppelganger/types.zig");
 const NuclearFlags = rtTypes.NuclearFlags;
@@ -20,22 +20,22 @@ pub const ParseError = error{
 pub const Error = (std.fs.File.WriteError || rtEngine.Error || ParseError || std.json.Scanner.NextError);
 
 pub const AstReader = struct {
-    runtime: *rt.Runtime,
+    generator: *dp.Generator,
     stage: ReaderStage,
     alloc: mem.Allocator,
     howDeep: u64,
     source: std.json.Reader(std.json.default_buffer_size, std.fs.File.Reader),
 
-    const log = std.log.scoped(.astReader);
+    const log = std.log.scoped(.astAnalyzer);
 
-    pub fn fromFile(alloc: std.mem.Allocator, runtime: *rt.Runtime, reader: std.fs.File.Reader) AstReader {
+    pub fn fromFile(alloc: std.mem.Allocator, generator: *dp.Generator, reader: std.fs.File.Reader) AstReader {
         const source = std.json.reader(alloc, reader);
 
         return AstReader{
             .alloc = alloc,
             .source = source,
             .howDeep = 0,
-            .runtime = runtime,
+            .generator = generator,
             .stage = ReaderStage.readingRoot,
         };
     }
@@ -96,7 +96,7 @@ pub const AstReader = struct {
     fn readRootStringManifest(self: *@This(), str: []const u8) Error!void {
         if (mem.eql(u8, str, "name")) {
             const vmName = try self.expectString("root:name must be not empty.");
-            try self.runtime.setSourceName(vmName);
+            try self.generator.setSourceName(vmName);
         } else if (mem.eql(u8, str, "expression")) {
             self.stage = .readingInitialAst;
         }
@@ -117,24 +117,24 @@ pub const AstReader = struct {
                 switch (term) {
                     .let => |let| {
                         log.debug("definindo {any}", .{let});
-                        try self.runtime.insert(term);
+                        try self.generator.insert(term);
                         self.alloc.destroy(let);
                     },
 
                     .boolean => |boo| {
                         log.debug("booleano {any}", .{boo});
-                        try self.runtime.insert(term);
+                        try self.generator.insert(term);
                     },
 
                     .tuple => |t| {
                         log.debug("bota um halls na lingua amor: ({any}, {any})", .{ t.first, t.second });
-                        try self.runtime.insert(term);
+                        try self.generator.insert(term);
                         self.alloc.destroy(t);
                     },
 
                     .str => |opa| {
                         log.debug("string {s}", .{opa.value});
-                        try self.runtime.insert(term);
+                        try self.generator.insert(term);
                         // self.alloc.destroy(opa.value.ptr);
                     },
 
@@ -319,7 +319,7 @@ pub const AstReader = struct {
 
     fn instropectPrint(self: *@This()) Error!spec.Print {
         var term = spec.Print.empty();
-        self.runtime.nuclearFlags.forceNoop = NuclearFlags.disabled;
+        self.generator.nuclearFlags.forceNoop = NuclearFlags.disabled;
 
         while (!try self.isTreeFinished()) {
             const key = try self.expectKey();
@@ -612,19 +612,19 @@ pub const AstReader = struct {
         return true;
     }
 
-    pub fn parseEntire(parentAllocator: mem.Allocator, runtime: *rt.Runtime, reader: std.fs.File.Reader) !AstReader {
+    pub fn parseEntire(parentAllocator: mem.Allocator, generator: *dp.Generator, reader: std.fs.File.Reader) !AstReader {
         var arena = std.heap.ArenaAllocator.init(parentAllocator);
         var alloc = arena.allocator();
         defer arena.deinit();
 
-        var astReader = AstReader.fromFile(alloc, runtime, reader);
+        var astReader = AstReader.fromFile(alloc, generator, reader);
         defer astReader.deinit();
 
         var timer = try std.time.Timer.start();
         while (try astReader.next()) {}
 
         const elapsed = timer.read();
-        log.debug("gen file: {} ms ({} μs)", .{ elapsed / 1000 / 1000, elapsed / 1000 });
+        log.debug("load ast: {} ms ({} μs)", .{ elapsed / 1000 / 1000, elapsed / 1000 });
 
         return astReader;
     }

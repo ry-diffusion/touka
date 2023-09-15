@@ -1,9 +1,8 @@
 const std = @import("std");
 const json = std.json;
 const fs = std.fs;
-const ast = @import("ast.zig");
 const AstReader = @import("reader.zig").AstReader;
-const dpplgngr = @import("doppelganger/runtime.zig");
+const dpplgngr = @import("doppelganger/generator.zig");
 const engine = @import("doppelganger/engine.zig");
 const c = @cImport({
     @cInclude("malloc.h");
@@ -46,7 +45,7 @@ pub fn logger(
         mark = '-';
     }
 
-    nosuspend stderr.print("[ {d:>3}B ({d:>8}B) ] {s:>7} ({s:<16}) ", .{ used, diff, level.asText(), scope_prefix }) catch return;
+    nosuspend stderr.print("[ {d:>10}B ({d:>8}B) ] {s:>7} ({s:<16}) ", .{ used, diff, level.asText(), scope_prefix }) catch return;
     lastMemoryUsage = used;
     nosuspend stderr.print(format ++ "\n", args) catch return;
 }
@@ -69,8 +68,13 @@ pub fn main() !void {
     gpa.free(absolutePath);
     var reader = inputFile.reader();
 
-    var runtime = try dpplgngr.Runtime.init(gpa);
-    defer runtime.deinit();
+    var generator = try dpplgngr.Generator.init(gpa);
+    defer generator.deinit();
 
-    _ = try AstReader.parseEntire(gpa, &runtime, reader);
+    _ = try AstReader.parseEntire(gpa, &generator, reader);
+
+    var timer = try std.time.Timer.start();
+    try generator.generate();
+    const elapsed = timer.read();
+    std.log.debug("gen file: {} ms ({} μs)", .{ elapsed / 1000 / 1000, elapsed / 1000 });
 }

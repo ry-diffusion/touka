@@ -1,22 +1,35 @@
 // vi: ft=c
+/* TR (Touka Runtime) declarations */
+#ifndef TOUKA_H
+#define TOUKA_H
 
+/* Touka types */
 typedef unsigned char Boolean;
 typedef int Num;
 typedef char *Str;
 typedef void *Lazy;
+typedef void *DpLoop;
 
 typedef struct workState {
   void *data;
 } WorkState;
 
-struct Tuple {
+typedef struct tuple {
   void *first;
   void *second;
-};
+} Tuple;
 
-typedef void (*Function)(struct nUvWorkState *state);
+static DpLoop langLoop;
+typedef void (*Function)(WorkState *state);
 
-/* Core libs */
-extern void printStr(Str *out, Str content);
-extern void printNum(Str *out, Num content);
-extern void printBool(Str *out, Boolean content);
+/* External libraries */
+DpLoop tk_initLoop(void);
+Num tk_run(DpLoop loop, int);
+
+/* Core functions */
+extern void tr_printStr(Str *out, Str content);
+extern void tr_printNum(Num *out, Num content);
+extern void tr_printBool(Boolean *out, Boolean content);
+#endif
+
+/* Finish TR declarations */
