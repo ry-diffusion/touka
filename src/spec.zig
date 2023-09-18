@@ -13,7 +13,39 @@ pub const TermKind = enum {
     Bool,
 };
 
-pub const BinaryOp = enum { Add, Sub, Mul, Div, Rem, Eq, Neq, Lt, Gt, Lte, Gte, And, Or };
+pub const BinaryOp = enum {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+    And,
+    Or,
+
+    pub fn asText(self: BinaryOp) []const u8 {
+        return switch (self) {
+            .Add => "+",
+            .Sub => "-",
+            .Mul => "*",
+            .Div => "/",
+            .Rem => "%",
+            .Eq => "==",
+            .Neq => "!=",
+            .Lt => "<",
+            .Gt => ">",
+            .Lte => "<=",
+            .Gte => ">=",
+            .And => "&&",
+            .Or => "||",
+        };
+    }
+};
 pub const KeyName = enum { kind, value, name, text, then, location, condition, otherwise, next, start, end, lhs, rhs, op, callee, arguments, parameters, filename, first, second };
 
 pub const Location = struct {

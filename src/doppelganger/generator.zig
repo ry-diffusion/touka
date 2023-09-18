@@ -3,24 +3,58 @@ const uv = @import("uv.zig");
 const t = @import("types.zig");
 const engine = @import("engine.zig");
 const spec = @import("../spec.zig");
+const functionArgument = "WorkState* s";
 const libTouka = @embedFile("./touka.h");
+
+const DependencyId = t.Id;
+const Arguments = std.ArrayList(DependencyId);
 const AutoHashMap = std.AutoHashMap;
 const StringHM = std.StringHashMap;
 const Tuple = std.meta.Tuple;
 
-const EvaluationID = []u8;
+pub const Evaluation = union(enum) {
+    unknown,
+    reference: struct { to: DependencyId },
 
-pub const Phase = enum { Parsing, Generating };
+    function: struct {
+        name: DependencyId,
+        arguments: Arguments,
+        body: DependencyId,
+    },
+
+    dependsOnCall: struct {
+        callee: DependencyId,
+        arguments: Arguments,
+    },
+
+    binary: struct {
+        op: DependencyId,
+        left: DependencyId,
+        right: DependencyId,
+    },
+
+    constant: union(enum) {
+        num: t.Int,
+        str: DependencyId,
+    },
+};
+
+const format = std.fmt.allocPrint;
+pub const Phase = enum { parsing, generating };
+pub const Error = error{ SemanticAnalysisFailed, OutOfMemory };
 
 pub const Generator = struct {
-    const VariableMap = StringHM(t.String);
+    const EvaluationMap = AutoHashMap(DependencyId, Evaluation);
+    const StringMap = AutoHashMap(DependencyId, t.String);
 
     alloc: std.mem.Allocator,
     phase: Phase,
     engine: engine.State,
     nuclearFlags: t.NuclearFlags,
+    evaluations: EvaluationMap,
+    strings: StringMap,
 
-    currentEvalId: t.Id,
+    totalDependencies: t.Id,
     file: std.fs.File,
     output: std.io.BufferedWriter(4096, std.fs.File.Writer),
 
@@ -32,12 +66,14 @@ pub const Generator = struct {
 
         var rt = Generator{
             .alloc = alloc,
+            .strings = StringMap.init(alloc),
             .engine = try engine.State.init(),
             .nuclearFlags = t.NuclearFlags.empty(),
-            .currentEvalId = 3,
+            .totalDependencies = 3,
             .output = std.io.bufferedWriter(outputFile.writer()),
             .file = outputFile,
-            .phase = Phase.Parsing,
+            .evaluations = EvaluationMap.init(alloc),
+            .phase = Phase.parsing,
         };
 
         try outputFile.writeAll(libTouka);
@@ -64,12 +100,131 @@ pub const Generator = struct {
         _ = try self.output.write("\n");
     }
 
+    fn putString(self: *Self, to: t.String) !DependencyId {
+        var iter = self.strings.iterator();
+
+        while (iter.next()) |item| {
+            const id = @as(DependencyId, item.key_ptr.*);
+            const str = @as(t.String, item.value_ptr.*);
+
+            if (std.mem.eql(u8, str, to)) {
+                return id;
+            }
+        }
+
+        const id = self.getDependencyId();
+        try self.strings.put(id, to);
+
+        return id;
+    }
+
     pub fn generate(self: *Self) !void {
         try self.append("int main(void) {{", .{});
         try self.append("langLoop = tk_initLoop();", .{});
 
         defer self.append("}}", .{}) catch unreachable;
         defer self.append("return tk_run(langLoop, 0);", .{}) catch unreachable;
+    }
+
+    fn getDependencyId(self: *Self) DependencyId {
+        self.totalDependencies += 1;
+
+        return self.totalDependencies;
+    }
+
+    fn expandTerm(self: *Self, term: spec.Term) Error!DependencyId {
+        const id = self.getDependencyId();
+
+        switch (term) {
+            .int => |dasTerm| {
+                try self.evaluations.put(id, .{ .constant = .{ .num = dasTerm.value } });
+            },
+
+            .str => |dasStr| {
+                const stringId = try self.putString(try self.alloc.dupe(u8, dasStr.value));
+                try self.evaluations.put(id, .{ .constant = .{ .str = stringId } });
+            },
+
+            .binary => |dasBinary| {
+                return try self.expandBinary(dasBinary);
+            },
+
+            .call => |call| {
+                var node = call.arguments.popFirst();
+                var arguments = Arguments.init(self.alloc);
+
+                const calleeId = try self.expandTerm(call.callee);
+
+                while (node) |n| : (node = n.next) {
+                    try arguments.append(try self.expandTerm(n.data));
+                }
+
+                try self.evaluations.put(id, .{
+                    .dependsOnCall = .{
+                        .callee = calleeId,
+                        .arguments = arguments,
+                    },
+                });
+            },
+
+            .nil => {
+                try self.evaluations.put(id, .unknown);
+            },
+
+            .varTerm => |dasRef| {
+                const refNameId = try self.putString(try self.alloc.dupe(u8, dasRef.text));
+                try self.evaluations.put(id, .{ .reference = .{ .to = refNameId } });
+            },
+
+            else => {
+                std.debug.panic(".expandTerm unimplemented: {any}", .{term});
+            },
+        }
+
+        return id;
+    }
+
+    fn expandBinary(self: *Self, binary: *spec.Binary) !DependencyId {
+        const compStr = try self.alloc.dupe(u8, binary.op.asText());
+        const opId = try self.putString(compStr);
+
+        log.debug("compStr: bind({s},{d})", .{ compStr, opId });
+        const lhs = try self.expandTerm(binary.lhs);
+        const rhs = try self.expandTerm(binary.rhs);
+        const id = self.getDependencyId();
+
+        try self.evaluations.put(id, .{ .binary = .{ .op = opId, .left = lhs, .right = rhs } });
+
+        return id;
+    }
+
+    fn expandFunction(self: *Self, name: t.String, func: *spec.Function, next: ?*spec.Term) !void {
+        _ = next;
+        showInstropectLog(func);
+
+        log.debug("parsing function #{s}", .{name});
+
+        switch (func.value) {
+            .ifTerm => |ifTerm| {
+                const binaryId = switch (ifTerm.condition) {
+                    .binary => |binary| try self.expandBinary(binary),
+                    else => |i| {
+                        log.err("expected binary operation, found {any}", .{i});
+                        return Error.SemanticAnalysisFailed;
+                    },
+                };
+
+                const then = try self.expandTerm(ifTerm.then);
+                _ = then;
+                const else_ = try self.expandTerm(ifTerm.otherwise);
+                _ = else_;
+
+                _ = binaryId;
+                log.info("hella", .{});
+            },
+            else => log.err(".expandFunction unimplemented: {any}", .{func.value}),
+        }
+        try self.append("}}", .{});
     }
 
     pub fn insert(self: *Self, term: spec.Term) !void {
@@ -79,12 +234,32 @@ pub const Generator = struct {
         }
 
         switch (term) {
-            else => |ter| log.warn("unimplemented: {any}", .{ter}),
+            .let => |let| {
+                const varName = let.name.text;
+
+                switch (let.value) {
+                    .function => |f| {
+                        try self.expandFunction(varName, f, null);
+                    },
+                    else => log.warn(".insertLetValue unimplemented: {any}", .{let.value}),
+                }
+
+                log.debug("let: {s}", .{varName});
+            },
+            else => |ter| log.warn(".insert unimplemented: {any}", .{ter}),
         }
     }
 
     pub fn deinit(self: *Self) void {
+        var stringsIter = self.strings.iterator();
+
+        while (stringsIter.next()) |item| {
+            self.alloc.free(item.value_ptr.*);
+        }
+
         self.engine.deinit();
+        self.evaluations.deinit();
+        self.strings.deinit();
 
         _ = self.output.flush() catch 0;
         self.file.close();

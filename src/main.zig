@@ -52,6 +52,7 @@ pub fn logger(
 
 pub fn main() !void {
     const gpa = std.heap.c_allocator;
+    defer std.log.info("program finished.", .{});
 
     var argv = std.process.args();
     _ = argv.next();

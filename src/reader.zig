@@ -49,7 +49,7 @@ pub const AstReader = struct {
             return Error.SyntaxError;
         }) == std.json.TokenType.object_end) {
             self.howDeep += 1;
-            log.debug("depth: {}", .{self.howDeep});
+            log.debug("traverseDepth: {}", .{self.howDeep});
 
             _ = self.source.next() catch {
                 return Error.SyntaxError;
@@ -452,8 +452,8 @@ pub const AstReader = struct {
 
         while (!try self.isArrayFinished()) {
             const res = try self.instropectTerm();
-            var node = spec.Call.Arguments.Node{ .data = res };
-            params.prepend(&node);
+            var node = try box(self.alloc, spec.Call.Arguments.Node, .{ .data = res });
+            params.prepend(node);
         }
 
         try self.expect(.array_end);
