@@ -22,6 +22,8 @@ pub const Evaluation = union(enum) {
         body: DependencyId,
     },
 
+    print: DependencyId,
+
     dependsOnCall: struct {
         callee: DependencyId,
         arguments: Arguments,
@@ -37,6 +39,32 @@ pub const Evaluation = union(enum) {
         num: t.Int,
         str: DependencyId,
     },
+
+    const Self = @This();
+
+    inline fn isPure(self: *const Self) bool {
+        return switch (self.*) {
+            .function, .constant => true,
+            .print => false,
+            .dependsOnCall, .binary => false,
+            .reference => false,
+            else => false,
+        };
+    }
+
+    inline fn isFunction(self: *const Self) bool {
+        return switch (self.*) {
+            .function => true,
+            else => false,
+        };
+    }
+
+    inline fn isDeclaration(self: *const Self) bool {
+        return switch (self.*) {
+            .function, .constant => true,
+            else => false,
+        };
+    }
 };
 
 const format = std.fmt.allocPrint;
@@ -44,7 +72,7 @@ pub const Phase = enum { parsing, generating };
 pub const Error = error{ SemanticAnalysisFailed, OutOfMemory };
 
 pub const Generator = struct {
-    const EvaluationMap = AutoHashMap(DependencyId, Evaluation);
+    const EvaluationMap = std.AutoArrayHashMap(DependencyId, Evaluation);
     const StringMap = AutoHashMap(DependencyId, t.String);
 
     alloc: std.mem.Allocator,
@@ -118,7 +146,57 @@ pub const Generator = struct {
         return id;
     }
 
+    fn generateDeclaration(self: *Self, id: DependencyId, eval: Evaluation) !void {
+        switch (eval) {
+            .constant => |constant| {
+                switch (constant) {
+                    .num => |num| try self.append("const Num e_{} = {};", .{ id, num }),
+                    .str => |strId| {
+                        const str = self.strings.get(strId) orelse unreachable;
+                        try self.append("const Str e_{} = \"{s}\";", .{ id, str });
+                    },
+                }
+            },
+            else => std.debug.panic("invalid declaration", .{}),
+        }
+    }
+
+    pub fn generateExpression(self: *Self, id: DependencyId, eval: Evaluation) !void {
+        _ = id;
+        switch (eval) {
+            .binary => |b| {
+                const opStr = self.strings.get(b.op) orelse unreachable;
+                log.debug("running {s}", .{opStr});
+                const lhs = self.evaluations.fetchOrderedRemove(b.left).?.value;
+                const rhs = self.evaluations.fetchOrderedRemove(b.right).?.value;
+                log.debug("lhs = {any}; rhs = {any};", .{ lhs, rhs });
+            },
+
+            .print => |print| {
+                _ = print;
+                log.debug("TODO Print", .{});
+            },
+
+            else => std.debug.panic("invalid expression {any}", .{eval}),
+        }
+    }
+
     pub fn generate(self: *Self) !void {
+        var evalsIter = self.evaluations.iterator();
+
+        while (evalsIter.next()) |item| {
+            const id = @as(DependencyId, item.key_ptr.*);
+            const eval = @as(Evaluation, item.value_ptr.*);
+
+            if (eval.isPure() and eval.isDeclaration()) {
+                try self.generateDeclaration(id, eval);
+            }
+
+            if (!eval.isPure() and !eval.isFunction()) {
+                try self.generateExpression(id, eval);
+            }
+        }
+
         try self.append("int main(void) {{", .{});
         try self.append("langLoop = tk_initLoop();", .{});
 
@@ -171,6 +249,14 @@ pub const Generator = struct {
                 try self.evaluations.put(id, .unknown);
             },
 
+            .let => {
+                try self.insert(term);
+            },
+
+            .print => |p| {
+                try self.evaluations.put(id, .{ .print = try self.expandTerm(p.value) });
+            },
+
             .varTerm => |dasRef| {
                 const refNameId = try self.putString(try self.alloc.dupe(u8, dasRef.text));
                 try self.evaluations.put(id, .{ .reference = .{ .to = refNameId } });
@@ -188,7 +274,7 @@ pub const Generator = struct {
         const compStr = try self.alloc.dupe(u8, binary.op.asText());
         const opId = try self.putString(compStr);
 
-        log.debug("compStr: bind({s},{d})", .{ compStr, opId });
+        log.debug(".expandBinary: strMap({s},{d})", .{ compStr, opId });
         const lhs = try self.expandTerm(binary.lhs);
         const rhs = try self.expandTerm(binary.rhs);
         const id = self.getDependencyId();
@@ -201,8 +287,9 @@ pub const Generator = struct {
     fn expandFunction(self: *Self, name: t.String, func: *spec.Function, next: ?*spec.Term) !void {
         _ = next;
         showInstropectLog(func);
-
         log.debug("parsing function #{s}", .{name});
+        var arguments = Arguments.init(self.alloc);
+        var bodyId: ?DependencyId = null;
 
         switch (func.value) {
             .ifTerm => |ifTerm| {
@@ -224,7 +311,14 @@ pub const Generator = struct {
             },
             else => log.err(".expandFunction unimplemented: {any}", .{func.value}),
         }
-        try self.append("}}", .{});
+
+        try self.evaluations.put(self.getDependencyId(), .{
+            .function = .{
+                .name = try self.putString(name),
+                .arguments = arguments,
+                .body = bodyId.?,
+            },
+        });
     }
 
     pub fn insert(self: *Self, term: spec.Term) !void {
@@ -241,10 +335,21 @@ pub const Generator = struct {
                     .function => |f| {
                         try self.expandFunction(varName, f, null);
                     },
+                    .binary => |b| {
+                        _ = try self.expandBinary(b);
+                    },
                     else => log.warn(".insertLetValue unimplemented: {any}", .{let.value}),
                 }
 
-                log.debug("let: {s}", .{varName});
+                switch (let.next) {
+                    .nil => {},
+
+                    else => |n| {
+                        _ = try self.expandTerm(n);
+                    },
+                }
+
+                log.debug(".insert: defLet({s})", .{varName});
             },
             else => |ter| log.warn(".insert unimplemented: {any}", .{ter}),
         }

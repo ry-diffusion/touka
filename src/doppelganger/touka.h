@@ -10,6 +10,7 @@ typedef char *Str;
 typedef void *Lazy;
 typedef void *DpLoop;
 
+const Lazy Unknown = 0;
 typedef struct workState {
   void *data;
 } WorkState;
