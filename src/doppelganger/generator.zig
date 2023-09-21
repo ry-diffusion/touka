@@ -12,6 +12,18 @@ const AutoHashMap = std.AutoHashMap;
 const StringHM = std.StringHashMap;
 const Tuple = std.meta.Tuple;
 
+const EvaluationBinary = struct {
+    op: DependencyId,
+    left: DependencyId,
+    right: DependencyId,
+};
+
+const EvaluationBinaryProcessResult = struct { id: DependencyId, isPure: bool };
+const EvaluationConstant = union(enum) {
+    num: t.Int,
+    str: DependencyId,
+};
+
 pub const Evaluation = union(enum) {
     unknown,
     reference: struct { to: DependencyId },
@@ -29,22 +41,14 @@ pub const Evaluation = union(enum) {
         arguments: Arguments,
     },
 
-    binary: struct {
-        op: DependencyId,
-        left: DependencyId,
-        right: DependencyId,
-    },
+    binary: EvaluationBinary,
 
-    constant: union(enum) {
-        num: t.Int,
-        str: DependencyId,
-    },
-
+    constant: EvaluationConstant,
     const Self = @This();
 
     inline fn isPure(self: *const Self) bool {
         return switch (self.*) {
-            .function, .constant => true,
+            .constant => true,
             .print => false,
             .dependsOnCall, .binary => false,
             .reference => false,
@@ -161,23 +165,114 @@ pub const Generator = struct {
         }
     }
 
-    pub fn generateExpression(self: *Self, id: DependencyId, eval: Evaluation) !void {
-        _ = id;
+    fn binaryProccess(self: *Self, eval: Evaluation) !EvaluationBinaryProcessResult {
+        const resultId = self.getDependencyId();
+        var refId: ?DependencyId = null;
+        var isPure: bool = false;
+        try self.append("const Lazy e_{} = Unknown;", .{resultId});
+
         switch (eval) {
-            .binary => |b| {
-                const opStr = self.strings.get(b.op) orelse unreachable;
-                log.debug("running {s}", .{opStr});
-                const lhs = self.evaluations.fetchOrderedRemove(b.left).?.value;
-                const rhs = self.evaluations.fetchOrderedRemove(b.right).?.value;
-                log.debug("lhs = {any}; rhs = {any};", .{ lhs, rhs });
+            .constant => |constant| switch (constant) {
+                .num => |n| {
+                    const numId = self.getDependencyId();
+                    try self.append("const Num e_{} = {};", .{ numId, n });
+
+                    isPure = true;
+
+                    refId = numId;
+                },
+
+                .str => |strId| {
+                    const str = self.strings.get(strId) orelse unreachable;
+                    const strCodeId = self.getDependencyId();
+
+                    refId = strCodeId;
+                    try self.append("const Str e_{} = \"{s}\";", .{ strCodeId, str });
+                },
             },
+
+            .reference => |ref| {
+                refId = ref.to;
+            },
+
+            else => std.debug.panic("invalid binary hand {any}", .{eval}),
+        }
+
+        try self.append("e_{} = &e_{};", .{ resultId, refId.? });
+
+        return .{
+            .id = resultId,
+            .isPure = isPure,
+        };
+    }
+
+    fn binaryL2LProcess(self: *Self, a: EvaluationConstant, b: EvaluationConstant) !DependencyId {
+        const resultId = self.getDependencyId();
+        var baseInt: ?t.Int = null;
+        var baseStr: ?t.String = null;
+
+        switch (a) {
+            .num => |num| {
+                baseInt = num;
+            },
+
+            .str => |strId| {
+                baseStr = self.strings.get(strId) orelse unreachable;
+            },
+        }
+
+        switch (b) {
+            .num => |num| {
+                if (baseInt) |bint|
+                    try self.append("const Num e_{} = {} + {};", .{ resultId, bint, num });
+
+                if (baseStr) |bstr|
+                    try self.append("const Str e_{} = \"{s}\" \"{}\";", .{ resultId, bstr, num });
+            },
+
+            .str => |strId| {
+                const str = self.strings.get(strId) orelse unreachable;
+
+                if (baseStr) |bstr|
+                    try self.append("const Str e_{} = \"{s}\" \"{s}\";", .{ resultId, bstr, str });
+
+                if (baseInt) |bint|
+                    try self.append("const Str e_{} = \"{}\" \"{s}\";", .{ resultId, bint, str });
+            },
+        }
+
+        return resultId;
+    }
+
+    fn generateBinary(self: *Self, id: DependencyId, b: EvaluationBinary) !void {
+        _ = id;
+
+        const opStr = self.strings.get(b.op) orelse unreachable;
+        log.debug("running {s}", .{opStr});
+        const lhs = self.evaluations.fetchOrderedRemove(b.left).?.value;
+        const rhs = self.evaluations.fetchOrderedRemove(b.right).?.value;
+
+        if (lhs.isPure() and rhs.isPure()) {
+            _ = try self.binaryL2LProcess(lhs.constant, rhs.constant);
+        }
+
+        log.debug("\n   lhs = {any}\n   rhs = {any};", .{ lhs, rhs });
+    }
+
+    fn generateExpression(self: *Self, id: DependencyId, eval: Evaluation) !void {
+        switch (eval) {
+            .binary => |b| try self.generateBinary(id, b),
 
             .print => |print| {
                 _ = print;
-                log.debug("TODO Print", .{});
+                log.warn("TODO Print", .{});
             },
 
-            else => std.debug.panic("invalid expression {any}", .{eval}),
+            .function => {
+                log.warn("TODO Function", .{});
+            },
+
+            else => std.debug.panic(".generateExpression: invalid expression {any}", .{eval}),
         }
     }
 
