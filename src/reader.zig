@@ -140,6 +140,7 @@ pub const AstReader = struct {
 
                     .print => |p| {
                         log.debug("pq n né? vo mostrar assim kk {any}", .{p});
+                        try self.generator.insert(term);
                         self.alloc.destroy(p);
                     },
 

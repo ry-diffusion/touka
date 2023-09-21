@@ -28,9 +28,12 @@ DpLoop tk_initLoop(void);
 Num tk_run(DpLoop loop, int);
 
 /* Core functions */
-extern void tr_printStr(Str *out, Str content);
-extern void tr_printNum(Num *out, Num content);
-extern void tr_printBool(Boolean *out, Boolean content);
+extern void tk_printStrComplex(Str *out, Str content);
+extern void tk_printNumComplex(Num *out, Num content);
+extern void tk_printBoolComplex(Boolean *out, Boolean content);
+extern void tk_printStrNat(Str content);
+extern void tk_printNumNat(Num *out, Num content);
+extern void tk_printBoolNat(Boolean *out, Boolean content);
 #endif
 
 /* Finish TR declarations */

@@ -1,0 +1,1 @@
+{"name":"test.rinha","expression":{"kind":"Print","value":{"kind":"Str","value":"oi","location":{"start":6,"end":10,"filename":"test.rinha"}},"location":{"start":0,"end":11,"filename":"test.rinha"}},"location":{"start":0,"end":11,"filename":"test.rinha"}}
