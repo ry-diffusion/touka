@@ -28,6 +28,9 @@ pub const State = struct {
             },
         };
 
+        if (c.tcc_set_options(state.compilerState, "-nostdlib") != 0)
+            return Error.SetOptionFailed;
+
         if (c.tcc_set_output_type(state.compilerState, c.TCC_OUTPUT_MEMORY) != 0)
             return Error.SetOptionFailed;
 
@@ -42,7 +45,7 @@ pub const State = struct {
     }
 
     pub fn run(self: *Self) !void {
-        if (c.tcc_run(self.compilerState, 0, null) != 0)
+        if (c.tcc_run(self.compilerState, 0, null) < 0)
             return Error.RunFailed;
     }
 

@@ -2,6 +2,6 @@
 set -eux
 cd tcc
 
-./configure --with-libgcc --enable-static --cc="zig cc" 
+./configure --with-libgcc --with-selinux --enable-static --cc="zig cc" --prefix="/usr" 
 zig cc -O2 -flto -DC2STR conftest.c -o c2str.exe 
 ./c2str.exe include/tccdefs.h tccdefs_.h
