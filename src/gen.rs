@@ -103,6 +103,10 @@ impl State {
                     (Term::Str(s), Term::Str(s2)) => {
                         maybe!(self.it, false);
                         self.runtime_queue.insert(self.it, format!("!strcmp({:?}, {:?})", s.value, s2.value));
+                    },
+
+                    (Term::Bool(b), Term::Bool(b2)) => {
+                        maybe!(self.it, b.value == b2.value);
                     }
 
                     _ => todo!(),
@@ -116,6 +120,10 @@ impl State {
                     (Term::Str(s), Term::Str(s2)) => {
                         maybe!(self.it, false);
                         self.runtime_queue.insert(self.it, format!("!!strcmp({:?}, {:?})", s.value, s2.value));
+                    },
+
+                    (Term::Bool(b), Term::Bool(b2)) => {
+                        maybe!(self.it, b.value != b2.value);
                     }
 
                     _ => todo!(),
