@@ -14,7 +14,7 @@ void p(void*v, Kind t) {
             break;
     }
 }
-int v_1 = 4;
+int v_1 = 2;
 const Kind t_1 = 254;
 int main(void) {
 p((void*)&v_1, t_1);

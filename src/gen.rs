@@ -36,8 +36,34 @@ impl State {
             Term::Binary(binary) => match binary.op {
                 crate::ast::BinaryOp::Add => match (*binary.lhs.clone(), *binary.rhs.clone()) {
                     (Term::Int(x), Term::Int(z)) => {
-                        self.constants
-                            .insert(self.it, ("int".to_string(), format!("{}", x.value + z.value)));
+                        self.constants.insert(
+                            self.it,
+                            ("int".to_string(), format!("{}", x.value + z.value)),
+                        );
+                        self.types.insert(self.it, INT);
+                    }
+
+                    _ => todo!(),
+                },
+
+                crate::ast::BinaryOp::Sub => match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        self.constants.insert(
+                            self.it,
+                            ("int".to_string(), format!("{}", x.value - z.value)),
+                        );
+                        self.types.insert(self.it, INT);
+                    }
+
+                    _ => todo!(),
+                },
+
+                crate::ast::BinaryOp::Div => match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        self.constants.insert(
+                            self.it,
+                            ("int".to_string(), format!("{}", x.value / z.value)),
+                        );
                         self.types.insert(self.it, INT);
                     }
 
