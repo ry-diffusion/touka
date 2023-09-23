@@ -10,12 +10,12 @@ void p(void*v, Kind t) {
             puts((char*)v);
             break;
         case i:
-            printf("%d\n", *v);
+            printf("%d\n", *(int*)v);
             break;
     }
 }
-char* v_1 = "Hello world";
-const Kind t_1 = 202;
+int v_1 = 4;
+const Kind t_1 = 254;
 int main(void) {
-p((void*)v_1, t_1);
+p((void*)&v_1, t_1);
 return 0;}

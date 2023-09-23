@@ -22,8 +22,29 @@ impl State {
 
         match term {
             Term::Str(s) => {
-                self.constants.insert(self.it, ("char*".to_string(), format!("{:?}", s.value)));
+                self.constants
+                    .insert(self.it, ("char*".to_string(), format!("{:?}", s.value)));
                 self.types.insert(self.it, STR);
+            }
+
+            Term::Int(i) => {
+                self.constants
+                    .insert(self.it, ("int".to_string(), format!("{}", i.value)));
+                self.types.insert(self.it, INT);
+            }
+
+            Term::Binary(binary) => match binary.op {
+                crate::ast::BinaryOp::Add => match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        self.constants
+                            .insert(self.it, ("int".to_string(), format!("{}", x.value + z.value)));
+                        self.types.insert(self.it, INT);
+                    }
+
+                    _ => todo!(),
+                },
+
+                _ => todo!(),
             },
 
             _ => {}
@@ -31,10 +52,10 @@ impl State {
         return self.it;
     }
 
-    pub fn write(mut self:  Self) -> GenericResult<()> {
+    pub fn write(mut self: Self) -> GenericResult<()> {
         let mut output = File::create("output.c")?;
 
-        writeln!(output, "{}", include_str!("yamero.c"));
+        writeln!(output, "{}", include_str!("yamero.c"))?;
 
         for (j, (k, v)) in self.constants {
             writeln!(output, "{} v_{} = {};", k, j, v)?
@@ -44,11 +65,10 @@ impl State {
             writeln!(output, "const Kind t_{j} = {k};")?;
         }
 
-
         writeln!(output, "int main(void) {{")?;
 
         for item in self.print_queue {
-            writeln!(output, "p((void*)v_{item}, t_{item});")?;
+            writeln!(output, "p((void*)&v_{item}, t_{item});")?;
         }
 
         writeln!(output, "return 0;}}")?;
@@ -57,8 +77,6 @@ impl State {
     }
 
     pub fn generate(self: &mut Self, source: AstRoot) -> GenericResult<()> {
-
-
         match source.expression {
             crate::ast::Term::Error(_) => todo!(),
             crate::ast::Term::Int(_) => todo!(),

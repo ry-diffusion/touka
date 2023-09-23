@@ -10,7 +10,7 @@ void p(void*v, Kind t) {
             puts((char*)v);
             break;
         case i:
-            printf("%d\n", *v);
+            printf("%d\n", *(int*)v);
             break;
     }
 }
