@@ -31,9 +31,8 @@ void p(void*v, Kind t) {
         }
     }
 }
-char v_1 = false;
+char v_1 = true;
 const Kind t_1 = 186;
 int main(void) {
-v_1 = !strcmp("sim", "sim");
 p((void*)&v_1, t_1);
 return 0;}
