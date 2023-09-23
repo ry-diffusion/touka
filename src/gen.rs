@@ -7,12 +7,14 @@ use crate::ast::{File as AstRoot, Term};
 
 const STR: u8 = 0xca;
 const INT: u8 = 0xfe;
+const MAYBE: u8 = 0xba;
 
 #[derive(Default)]
 pub struct State {
     constants: HashMap<usize, (String, String)>,
     types: HashMap<usize, u8>,
     print_queue: Vec<usize>,
+    runtime_queue: HashMap<usize, String>,
     it: usize,
 }
 
@@ -20,27 +22,42 @@ impl State {
     fn inspect(self: &mut Self, term: &Term) -> usize {
         self.it += 1;
 
+        macro_rules! int {
+            ($to:expr, $value:expr) => {
+                {
+                      self.constants
+                    .insert($to, ("int".to_string(), format!("{}", $value)));
+                self.types.insert($to, INT);
+                }
+            };
+        }
+
+        macro_rules! maybe {
+            ($to:expr, $value:expr) => {
+                {
+                      self.constants
+                    .insert($to, ("char".to_string(), format!("{}", $value)));
+                self.types.insert($to, MAYBE);
+                }
+            };
+        }
+
         match term {
             Term::Str(s) => {
+            
                 self.constants
                     .insert(self.it, ("char*".to_string(), format!("{:?}", s.value)));
                 self.types.insert(self.it, STR);
             }
 
             Term::Int(i) => {
-                self.constants
-                    .insert(self.it, ("int".to_string(), format!("{}", i.value)));
-                self.types.insert(self.it, INT);
+              int!(self.it, i.value);
             }
 
             Term::Binary(binary) => match binary.op {
                 crate::ast::BinaryOp::Add => match (*binary.lhs.clone(), *binary.rhs.clone()) {
                     (Term::Int(x), Term::Int(z)) => {
-                        self.constants.insert(
-                            self.it,
-                            ("int".to_string(), format!("{}", x.value + z.value)),
-                        );
-                        self.types.insert(self.it, INT);
+                            int!(self.it, x.value + z.value);
                     }
 
                     _ => todo!(),
@@ -48,11 +65,7 @@ impl State {
 
                 crate::ast::BinaryOp::Sub => match (*binary.lhs.clone(), *binary.rhs.clone()) {
                     (Term::Int(x), Term::Int(z)) => {
-                        self.constants.insert(
-                            self.it,
-                            ("int".to_string(), format!("{}", x.value - z.value)),
-                        );
-                        self.types.insert(self.it, INT);
+                        int!(self.it, x.value - z.value);
                     }
 
                     _ => todo!(),
@@ -60,17 +73,60 @@ impl State {
 
                 crate::ast::BinaryOp::Div => match (*binary.lhs.clone(), *binary.rhs.clone()) {
                     (Term::Int(x), Term::Int(z)) => {
-                        self.constants.insert(
-                            self.it,
-                            ("int".to_string(), format!("{}", x.value / z.value)),
-                        );
-                        self.types.insert(self.it, INT);
+                        int!(self.it, x.value / z.value);
+                    }
+
+                    _ => todo!(),
+                },
+                
+                crate::ast::BinaryOp::Mul => match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        int!(self.it, x.value * z.value);
                     }
 
                     _ => todo!(),
                 },
 
-                _ => todo!(),
+                crate::ast::BinaryOp::Rem =>  match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        int!(self.it, x.value % z.value);
+                    }
+
+                    _ => todo!(),
+                },
+
+                crate::ast::BinaryOp::Eq =>  match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        maybe!(self.it, x.value == z.value);
+                    }
+
+                    (Term::Str(s), Term::Str(s2)) => {
+                        maybe!(self.it, false);
+                        self.runtime_queue.insert(self.it, format!("!strcmp({:?}, {:?})", s.value, s2.value));
+                    }
+
+                    _ => todo!(),
+                },
+
+                crate::ast::BinaryOp::Neq => match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        maybe!(self.it, x.value != z.value);
+                    },
+
+                    (Term::Str(s), Term::Str(s2)) => {
+                        maybe!(self.it, false);
+                        self.runtime_queue.insert(self.it, format!("!!strcmp({:?}, {:?})", s.value, s2.value));
+                    }
+
+                    _ => todo!(),
+                },
+
+                crate::ast::BinaryOp::Lt => todo!(),
+                crate::ast::BinaryOp::Gt => todo!(),
+                crate::ast::BinaryOp::Lte => todo!(),
+                crate::ast::BinaryOp::Gte => todo!(),
+                crate::ast::BinaryOp::And => todo!(),
+                crate::ast::BinaryOp::Or => todo!()
             },
 
             _ => {}
@@ -92,6 +148,10 @@ impl State {
         }
 
         writeln!(output, "int main(void) {{")?;
+
+        for (id, expr) in self.runtime_queue {
+            writeln!(output, "v_{id} = {expr};")?;
+        }
 
         for item in self.print_queue {
             writeln!(output, "p((void*)&v_{item}, t_{item});")?;
