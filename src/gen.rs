@@ -23,104 +23,95 @@ impl State {
         self.it += 1;
 
         macro_rules! int {
-            ($to:expr, $value:expr) => {
-                {
-                      self.constants
+            ($to:expr, $value:expr) => {{
+                self.constants
                     .insert($to, ("int".to_string(), format!("{}", $value)));
                 self.types.insert($to, INT);
+            }};
+        }
+
+        macro_rules! maybe {
+            ($to:expr, $value:expr) => {{
+                self.constants
+                    .insert($to, ("char".to_string(), format!("{}", $value)));
+                self.types.insert($to, MAYBE);
+            }};
+        }
+
+        macro_rules! loveint {
+            ($it:expr, $binary:ident, $nm: expr, $op:tt) => {
+                match (*$binary.lhs.clone(), *$binary.rhs.clone()) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        int!($it, x.value $op z.value);
+                    }
+
+                    _ => panic!(concat!($nm, "=> Just ints.")),
                 }
             };
         }
 
-        macro_rules! maybe {
-            ($to:expr, $value:expr) => {
-                {
-                      self.constants
-                    .insert($to, ("char".to_string(), format!("{}", $value)));
-                self.types.insert($to, MAYBE);
+          macro_rules! loveintcomp {
+            ($it:expr, $binary:ident, $nm: expr, $op:tt) => {
+                match (*$binary.lhs.clone(), *$binary.rhs.clone()) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        maybe!($it, x.value $op z.value);
+                    }
+
+                    _ => panic!(concat!($nm, "=> Just ints.")),
                 }
             };
         }
 
         match term {
             Term::Str(s) => {
-            
                 self.constants
                     .insert(self.it, ("char*".to_string(), format!("{:?}", s.value)));
                 self.types.insert(self.it, STR);
             }
 
             Term::Int(i) => {
-              int!(self.it, i.value);
+                int!(self.it, i.value);
             }
 
             Term::Binary(binary) => match binary.op {
-                crate::ast::BinaryOp::Add => match (*binary.lhs.clone(), *binary.rhs.clone()) {
-                    (Term::Int(x), Term::Int(z)) => {
-                            int!(self.it, x.value + z.value);
-                    }
+                crate::ast::BinaryOp::Add => loveint!(self.it, binary, "Add", +),
+                crate::ast::BinaryOp::Div => loveint!(self.it, binary, "Div", %),
+                crate::ast::BinaryOp::Sub => loveint!(self.it, binary, "Sub", *),
+                crate::ast::BinaryOp::Rem => loveint!(self.it, binary, "Rem", %),
+                crate::ast::BinaryOp::Mul => loveint!(self.it, binary, "Mul", *),
+                crate::ast::BinaryOp::Lt => loveintcomp!(self.it, binary, "Lt", <),
+                crate::ast::BinaryOp::Gt => loveintcomp!(self.it, binary, "Gt", >),
+                crate::ast::BinaryOp::Lte => loveintcomp!(self.it, binary, "Lte", >=),
+                crate::ast::BinaryOp::Gte => loveintcomp!(self.it, binary, "Gte", <=),
 
-                    _ => todo!(),
-                },
-
-                crate::ast::BinaryOp::Sub => match (*binary.lhs.clone(), *binary.rhs.clone()) {
-                    (Term::Int(x), Term::Int(z)) => {
-                        int!(self.it, x.value - z.value);
-                    }
-
-                    _ => todo!(),
-                },
-
-                crate::ast::BinaryOp::Div => match (*binary.lhs.clone(), *binary.rhs.clone()) {
-                    (Term::Int(x), Term::Int(z)) => {
-                        int!(self.it, x.value / z.value);
-                    }
-
-                    _ => todo!(),
-                },
-                
-                crate::ast::BinaryOp::Mul => match (*binary.lhs.clone(), *binary.rhs.clone()) {
-                    (Term::Int(x), Term::Int(z)) => {
-                        int!(self.it, x.value * z.value);
-                    }
-
-                    _ => todo!(),
-                },
-
-                crate::ast::BinaryOp::Rem =>  match (*binary.lhs.clone(), *binary.rhs.clone()) {
-                    (Term::Int(x), Term::Int(z)) => {
-                        int!(self.it, x.value % z.value);
-                    }
-
-                    _ => todo!(),
-                },
-
-                crate::ast::BinaryOp::Eq =>  match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                crate::ast::BinaryOp::Eq => match (*binary.lhs.clone(), *binary.rhs.clone()) {
                     (Term::Int(x), Term::Int(z)) => {
                         maybe!(self.it, x.value == z.value);
                     }
 
                     (Term::Str(s), Term::Str(s2)) => {
                         maybe!(self.it, false);
-                        self.runtime_queue.insert(self.it, format!("!strcmp({:?}, {:?})", s.value, s2.value));
-                    },
+                        self.runtime_queue
+                            .insert(self.it, format!("!strcmp({:?}, {:?})", s.value, s2.value));
+                    }
 
                     (Term::Bool(b), Term::Bool(b2)) => {
                         maybe!(self.it, b.value == b2.value);
                     }
 
-                    _ => todo!(),
+                    _ => panic!("Eq => Invalid types!"),
                 },
 
                 crate::ast::BinaryOp::Neq => match (*binary.lhs.clone(), *binary.rhs.clone()) {
                     (Term::Int(x), Term::Int(z)) => {
                         maybe!(self.it, x.value != z.value);
-                    },
+                    }
 
                     (Term::Str(s), Term::Str(s2)) => {
                         maybe!(self.it, false);
-                        self.runtime_queue.insert(self.it, format!("!!strcmp({:?}, {:?})", s.value, s2.value));
-                    },
+                        self.runtime_queue
+                            .insert(self.it, format!("!!strcmp({:?}, {:?})", s.value, s2.value));
+                    }
 
                     (Term::Bool(b), Term::Bool(b2)) => {
                         maybe!(self.it, b.value != b2.value);
@@ -129,12 +120,21 @@ impl State {
                     _ => todo!(),
                 },
 
-                crate::ast::BinaryOp::Lt => todo!(),
-                crate::ast::BinaryOp::Gt => todo!(),
-                crate::ast::BinaryOp::Lte => todo!(),
-                crate::ast::BinaryOp::Gte => todo!(),
-                crate::ast::BinaryOp::And => todo!(),
-                crate::ast::BinaryOp::Or => todo!()
+                crate::ast::BinaryOp::And => match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                    (Term::Bool(b), Term::Bool(b2)) => {
+                        maybe!(self.it, b.value && b2.value);
+                    }
+
+                    _ => panic!("Just bools are allowed."),
+                },
+
+                crate::ast::BinaryOp::Or => match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                    (Term::Bool(b), Term::Bool(b2)) => {
+                        maybe!(self.it, b.value || b2.value);
+                    }
+
+                    _ => panic!("Just bools are allowed."),
+                },
             },
 
             _ => {}
@@ -142,7 +142,7 @@ impl State {
         return self.it;
     }
 
-    pub fn write(mut self: Self) -> GenericResult<()> {
+    pub fn write(self: Self) -> GenericResult<()> {
         let mut output = File::create("output.c")?;
 
         writeln!(output, "{}", include_str!("yamero.c"))?;
