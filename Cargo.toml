@@ -1,0 +1,18 @@
+[package]
+name = "touka"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lalrpop-util = { version = "0.20.0", default-features = false, features = [
+  "lexer",
+  "unicode",
+] }
+miette = { version = "5.10.0", features = ["fancy"] }
+thiserror = "1.0.46"
+bupropion = { version = "0.0.14" }
+
+[build-dependencies]
+lalrpop = "0.20.0"
