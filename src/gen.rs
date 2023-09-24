@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error, fs::File};
 use std::io::Write;
 
 type GenericResult<T> = Result<T, Box<dyn Error + Sync + Send>>;
-use crate::ast::{File as AstRoot, Term};
+use crate::ast::{Binary, File as AstRoot, Term};
 
 const STR: u8 = 0xca;
 const INT: u8 = 0xfe;
@@ -88,9 +88,33 @@ impl State {
         }
 
         match term {
+            Term::Str(s) => {
+                phonk!(self.it, format!("{:?}", s.value));
+            }
             Term::Int(i) => {
                 int!(self.it, i.value);
             }
+
+            Term::If(comp) => match self.bag_or_die(*comp.condition.clone()) {
+                Term::Bool(b) => {
+                    let res = if b.value {
+                        self.inspect(&comp.then)
+                    } else {
+                        self.inspect(&comp.otherwise)
+                    };
+
+                    panic!("{}", res);
+                }
+                t @ Term::Binary(_) => {
+                    let res = self.inspect(&t);
+                    if self.constants.get(&res).unwrap().1 == "true" {
+                        self.inspect(&comp.then)
+                    } else {
+                        self.inspect(&comp.otherwise)
+                    };
+                }
+                what => panic!("If => Just boolean or binary. found {what:?}"),
+            },
 
             Term::Binary(binary) => match binary.op {
                 crate::ast::BinaryOp::Add => match (
@@ -107,6 +131,7 @@ impl State {
 
                     what => panic!("Add => Just ints and strings. found {what:?}"),
                 },
+
                 crate::ast::BinaryOp::Div => loveint!(self.it, binary, "Div", %),
                 crate::ast::BinaryOp::Sub => loveint!(self.it, binary, "Sub", *),
                 crate::ast::BinaryOp::Rem => loveint!(self.it, binary, "Rem", %),

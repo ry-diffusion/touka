@@ -38,6 +38,9 @@ sukuna('print("2" + "2")')
 sukuna("print(2 == 2)")
 sukuna("print(2 != 2)")
 sukuna("print(print(1) + print(2))")
-sukuna('print (if ("dalva" == "matagal") { 2 } else {"oi"})')
+sukuna('print (if ("dalva" == "matagal") { 2 } else { 4 })')
+sukuna('print (if ("dois" == "dois") { "sim" } else { "nao" })')
+sukuna('print (if (2 == 2) { "sim" } else { "nao" })')
+
 
 removedirs("/tmp/sk-wp")
