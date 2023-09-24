@@ -19,6 +19,24 @@ pub struct State {
 }
 
 impl State {
+    fn bag_or_die(self: &mut Self, term: Term) -> Term {
+        match term {
+            Term::Print(p) => {
+                let id = self.inspect(&p.value);
+                self.print_queue.push(id);
+                self.it += 1;
+
+                *p.value
+            }
+
+            _ => {
+                self.inspect(&term);
+
+                term
+            }
+        }
+    }
+
     fn inspect(self: &mut Self, term: &Term) -> usize {
         self.it += 1;
 
@@ -40,19 +58,19 @@ impl State {
 
         macro_rules! loveint {
             ($it:expr, $binary:ident, $nm: expr, $op:tt) => {
-                match (*$binary.lhs.clone(), *$binary.rhs.clone()) {
+                match (self.bag_or_die(*$binary.lhs.clone()), self.bag_or_die(*$binary.rhs.clone())) {
                     (Term::Int(x), Term::Int(z)) => {
                         int!($it, x.value $op z.value);
                     }
 
-                    _ => panic!(concat!($nm, "=> Just ints.")),
+                    what => panic!("{} => Just ints. found {what:?}", $nm),
                 }
             };
         }
 
-          macro_rules! loveintcomp {
+        macro_rules! loveintcomp {
             ($it:expr, $binary:ident, $nm: expr, $op:tt) => {
-                match (*$binary.lhs.clone(), *$binary.rhs.clone()) {
+                match (self.bag_or_die(*$binary.lhs.clone()), self.bag_or_die(*$binary.rhs.clone())) {
                     (Term::Int(x), Term::Int(z)) => {
                         maybe!($it, x.value $op z.value);
                     }
@@ -62,19 +80,33 @@ impl State {
             };
         }
 
-        match term {
-            Term::Str(s) => {
-                self.constants
-                    .insert(self.it, ("char*".to_string(), format!("{:?}", s.value)));
-                self.types.insert(self.it, STR);
-            }
+        macro_rules! phonk {
+            ($it:expr, $value:expr) => {{
+                self.constants.insert($it, ("char*".to_string(), $value));
+                self.types.insert($it, STR);
+            }};
+        }
 
+        match term {
             Term::Int(i) => {
                 int!(self.it, i.value);
             }
 
             Term::Binary(binary) => match binary.op {
-                crate::ast::BinaryOp::Add => loveint!(self.it, binary, "Add", +),
+                crate::ast::BinaryOp::Add => match (
+                    self.bag_or_die(*binary.lhs.clone()),
+                    self.bag_or_die(*binary.rhs.clone()),
+                ) {
+                    (Term::Int(x), Term::Int(z)) => {
+                        int!(self.it, x.value + z.value);
+                    }
+
+                    (Term::Str(s), Term::Str(s2)) => {
+                        phonk!(self.it, format!("{:?}", s.value + &s2.value));
+                    }
+
+                    what => panic!("Add => Just ints and strings. found {what:?}"),
+                },
                 crate::ast::BinaryOp::Div => loveint!(self.it, binary, "Div", %),
                 crate::ast::BinaryOp::Sub => loveint!(self.it, binary, "Sub", *),
                 crate::ast::BinaryOp::Rem => loveint!(self.it, binary, "Rem", %),
@@ -182,6 +214,7 @@ impl State {
             crate::ast::Term::If(_) => todo!(),
             crate::ast::Term::Print(what) => {
                 let it = self.inspect(&what.value);
+
                 self.print_queue.push(it);
             }
             crate::ast::Term::First(_) => todo!(),

@@ -1,4 +1,4 @@
-from os import system, chdir, mkdir
+from os import system, chdir, mkdir, remove, removedirs
 from pathlib import Path
 counter = 0
 
@@ -21,14 +21,23 @@ def sukuna(expr):
     name = f"/tmp/sk-{counter:03}-test"
     with open(name, 'w') as f:
         f.write(expr)
-    system(f"{rt} {name}")
-    system("tcc -run output.c")
     
+    if system(f"{rt} {name}") != 0:
+        print('unable to transpile source.')
+        remove(name)
+        return
+
+    system("tcc -run output.c")
+    remove("output.c")
+    remove(name)
 
 for op in ["*", "-", "/", "*", "%", "<", ">", "<=", ">="]:
     sukuna(f"print(2 {op} 2)")
 
+sukuna('print("2" + "2")')
 sukuna("print(2 == 2)")
 sukuna("print(2 != 2)")
+sukuna("print(print(1) + print(2))")
+sukuna('print (if ("dalva" == "matagal") { 2 } else {"oi"})')
 
-
+removedirs("/tmp/sk-wp")
