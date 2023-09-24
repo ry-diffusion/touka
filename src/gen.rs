@@ -147,9 +147,9 @@ impl State {
                     }
 
                     (Term::Str(s), Term::Str(s2)) => {
-                        maybe!(self.it, false);
-                        self.runtime_queue
-                            .insert(self.it, format!("!strcmp({:?}, {:?})", s.value, s2.value));
+                        maybe!(self.it, s.value == s2.value);
+                        // self.runtime_queue
+                        //     .insert(self.it, format!("!strcmp({:?}, {:?})", s.value, s2.value));
                     }
 
                     (Term::Bool(b), Term::Bool(b2)) => {
@@ -165,9 +165,9 @@ impl State {
                     }
 
                     (Term::Str(s), Term::Str(s2)) => {
-                        maybe!(self.it, false);
-                        self.runtime_queue
-                            .insert(self.it, format!("!!strcmp({:?}, {:?})", s.value, s2.value));
+                        maybe!(self.it, s.value != s2.value);
+                        // self.runtime_queue
+                        //     .insert(self.it, format!("!!strcmp({:?}, {:?})", s.value, s2.value));
                     }
 
                     (Term::Bool(b), Term::Bool(b2)) => {
