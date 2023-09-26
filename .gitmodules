@@ -1,8 +1,0 @@
-[submodule "origin"]
-	path = origin
-	url = https://github.com/aripiprazole/rinha-de-compiler.git
-
-[submodule "tcc"]
-	path = tcc
-	url = https://github.com/TinyCC/tinycc
-	branch = mob

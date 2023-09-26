@@ -8,21 +8,37 @@ use crate::ast::{Binary, File as AstRoot, Term};
 const STR: u8 = 0xca;
 const INT: u8 = 0xfe;
 const MAYBE: u8 = 0xba;
+const UNKNOWN: u8 = 0xbe;
+const FN_MAIN: usize = 0x00;
 
 #[derive(Default)]
 pub struct State {
     constants: HashMap<usize, (String, String)>,
     types: HashMap<usize, u8>,
     print_queue: Vec<usize>,
+    variables: HashMap<String, usize>,
+    /* function ID, Queue of Evaluatiions */
+    /* Of course, zero is main. */
+    evaluation_queue: HashMap<usize, Vec<String>>,
     runtime_queue: HashMap<usize, String>,
     it: usize,
 }
 
+trait IsPure {
+    fn is_pure(&self) -> bool;
+}
+
+impl IsPure for Term {
+    fn is_pure(&self) -> bool {
+        matches!(self, Term::Bool(_) | Term::Int(_) | Term::Str(_))
+    }
+}
+
 impl State {
-    fn bag_or_die(self: &mut Self, term: Term) -> Term {
+    fn bag_or_die(self: &mut Self, term: Term, parent: usize) -> Term {
         match term {
             Term::Print(p) => {
-                let id = self.inspect(&p.value);
+                let id = self.inspect(&p.value, parent);
                 self.print_queue.push(id);
                 self.it += 1;
 
@@ -30,15 +46,24 @@ impl State {
             }
 
             _ => {
-                self.inspect(&term);
+                self.inspect(&term, parent);
 
                 term
             }
         }
     }
 
-    fn inspect(self: &mut Self, term: &Term) -> usize {
+    fn inspect(self: &mut Self, term: &Term, parent: usize) -> usize {
         self.it += 1;
+
+        // let mut inspect! = |term| self.inspect!(term, parent);
+        // YOU DONT KNOW US TOO WELL, AT ALL.
+
+        macro_rules! inspect {
+            ($t:expr) => {
+                self.inspect($t, parent)
+            };
+        }
 
         macro_rules! int {
             ($to:expr, $value:expr) => {{
@@ -58,7 +83,7 @@ impl State {
 
         macro_rules! loveint {
             ($it:expr, $binary:ident, $nm: expr, $op:tt) => {
-                match (self.bag_or_die(*$binary.lhs.clone()), self.bag_or_die(*$binary.rhs.clone())) {
+                match (self.bag_or_die(*$binary.lhs.clone(), parent), self.bag_or_die(*$binary.rhs.clone(), parent)) {
                     (Term::Int(x), Term::Int(z)) => {
                         int!($it, x.value $op z.value);
                     }
@@ -70,7 +95,7 @@ impl State {
 
         macro_rules! loveintcomp {
             ($it:expr, $binary:ident, $nm: expr, $op:tt) => {
-                match (self.bag_or_die(*$binary.lhs.clone()), self.bag_or_die(*$binary.rhs.clone())) {
+                match (self.bag_or_die(*$binary.lhs.clone(), parent), self.bag_or_die(*$binary.rhs.clone(), parent)) {
                     (Term::Int(x), Term::Int(z)) => {
                         maybe!($it, x.value $op z.value);
                     }
@@ -82,35 +107,87 @@ impl State {
 
         macro_rules! phonk {
             ($it:expr, $value:expr) => {{
-                self.constants.insert($it, ("char*".to_string(), $value));
+                self.constants
+                    .insert($it, ("char*".to_string(), format!("{:?}", $value)));
                 self.types.insert($it, STR);
+            }};
+        }
+
+        macro_rules! lazy {
+            () => {{
+                self.constants
+                    .insert(self.it, ("void*".to_string(), "0".to_string()));
+                self.types.insert(self.it, UNKNOWN);
+
+                self.it
+            }};
+        }
+
+        macro_rules! push {
+            ($($t:tt)*) => {{
+                self.evaluation_queue.entry(parent).or_default().push(format!($($t)*));
+            }};
+        }
+
+        macro_rules! vitc {
+            ($a:tt + $b:tt) => {{
+                let rr = self.it;
+                self.it += 1;
+                int!(rr, $a.value);
+
+                let var = self
+                    .variables
+                    .get($b.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+                let result = lazy!();
+
+                push!("v_{result} = calloc(1, sizeof(char));");
+                push!("S(&v_{result},&t_{result},&v_{var},&v_{rr},t_{var},i);",);
+            }};
+        }
+
+        macro_rules! vits {
+            ($a:tt + $b:tt) => {{
+                let rr = self.it;
+                phonk!(rr, $a.value);
+                self.it += 1;
+
+                let var = self
+                    .variables
+                    .get($b.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+                let result = lazy!();
+
+                push!("v_{result} = calloc(1024, sizeof(char));");
+                push!("S(&v_{result},&t_{result}, (PSTR)&v_{var},(PSTR)&v_{rr},t_{var},s);",);
             }};
         }
 
         match term {
             Term::Str(s) => {
-                phonk!(self.it, format!("{:?}", s.value));
+                phonk!(self.it, s.value);
             }
+
             Term::Int(i) => {
                 int!(self.it, i.value);
             }
 
-            Term::If(comp) => match self.bag_or_die(*comp.condition.clone()) {
+            Term::If(comp) => match self.bag_or_die(*comp.condition.clone(), parent) {
                 Term::Bool(b) => {
                     let res = if b.value {
-                        self.inspect(&comp.then)
+                        inspect!(&comp.then)
                     } else {
-                        self.inspect(&comp.otherwise)
+                        inspect!(&comp.otherwise)
                     };
 
                     panic!("{}", res);
                 }
                 t @ Term::Binary(_) => {
-                    let res = self.inspect(&t);
+                    let res = inspect!(&t);
                     if self.constants.get(&res).unwrap().1 == "true" {
-                        self.inspect(&comp.then)
+                        inspect!(&comp.then)
                     } else {
-                        self.inspect(&comp.otherwise)
+                        inspect!(&comp.otherwise)
                     };
                 }
                 what => panic!("If => Just boolean or binary. found {what:?}"),
@@ -118,16 +195,13 @@ impl State {
 
             Term::Binary(binary) => match binary.op {
                 crate::ast::BinaryOp::Add => match (
-                    self.bag_or_die(*binary.lhs.clone()),
-                    self.bag_or_die(*binary.rhs.clone()),
+                    self.bag_or_die(*binary.lhs.clone(), parent),
+                    self.bag_or_die(*binary.rhs.clone(), parent),
                 ) {
-                    (Term::Int(x), Term::Int(z)) => {
-                        int!(self.it, x.value + z.value);
-                    }
-
-                    (Term::Str(s), Term::Str(s2)) => {
-                        phonk!(self.it, format!("{:?}", s.value + &s2.value));
-                    }
+                    (Term::Int(x), Term::Int(z)) => int!(self.it, x.value + z.value),
+                    (Term::Str(s), Term::Str(s2)) => phonk!(self.it, s.value + &s2.value),
+                    (Term::Var(v), Term::Int(i)) | (Term::Int(i), Term::Var(v)) => vitc!(i + v),
+                    (Term::Str(s), Term::Var(v)) | (Term::Var(v), Term::Str(s)) => vits!(s + v),
 
                     what => panic!("Add => Just ints and strings. found {what:?}"),
                 },
@@ -174,7 +248,7 @@ impl State {
                         maybe!(self.it, b.value != b2.value);
                     }
 
-                    _ => todo!(),
+                    _ => todo!("neq"),
                 },
 
                 crate::ast::BinaryOp::And => match (*binary.lhs.clone(), *binary.rhs.clone()) {
@@ -194,6 +268,31 @@ impl State {
                 },
             },
 
+            Term::Let(r) => {
+                match &*r.value {
+                    Term::Str(s) => {
+                        phonk!(self.it, s.value.clone());
+                    }
+                    Term::Int(i) => {
+                        int!(self.it, i.value);
+                    }
+
+                    _ => todo!("let carry"),
+                };
+
+                self.variables.insert(r.name.text.clone(), self.it);
+                inspect!(&r.next);
+            }
+            Term::Var(v) => {
+                return *self.variables.get(&v.text).unwrap();
+            }
+
+            Term::Print(p) => {
+                let it = inspect!(&p.value);
+
+                self.print_queue.push(it);
+            }
+
             _ => {}
         }
         return self.it;
@@ -209,13 +308,19 @@ impl State {
         }
 
         for (j, k) in self.types {
-            writeln!(output, "const Kind t_{j} = {k};")?;
+            writeln!(output, "Kind t_{j} = {k};")?;
         }
 
         writeln!(output, "int main(void) {{")?;
 
         for (id, expr) in self.runtime_queue {
             writeln!(output, "v_{id} = {expr};")?;
+        }
+
+        if let Some(eq) = self.evaluation_queue.get(&FN_MAIN) {
+            for item in eq {
+                writeln!(output, "{item}")?;
+            }
         }
 
         for item in self.print_queue {
@@ -228,26 +333,27 @@ impl State {
     }
 
     pub fn generate(self: &mut Self, source: AstRoot) -> GenericResult<()> {
-        match source.expression {
-            crate::ast::Term::Error(_) => todo!(),
-            crate::ast::Term::Int(_) => todo!(),
-            crate::ast::Term::Str(_) => todo!(),
-            crate::ast::Term::Call(_) => todo!(),
-            crate::ast::Term::Binary(_) => todo!(),
-            crate::ast::Term::Function(_) => todo!(),
-            crate::ast::Term::Let(_) => todo!(),
-            crate::ast::Term::If(_) => todo!(),
-            crate::ast::Term::Print(what) => {
-                let it = self.inspect(&what.value);
+        self.inspect(&source.expression, FN_MAIN);
+        // match source.expression {
+        //     crate::ast::Term::Error(_) => todo!(),
+        //     crate::ast::Term::Int(_) => todo!(),
+        //     crate::ast::Term::Str(_) => todo!(),
+        //     crate::ast::Term::Call(_) => todo!(),
+        //     crate::ast::Term::Binary(_) => todo!(),
+        //     crate::ast::Term::Function(_) => todo!(),
+        //     t @ crate::ast::Term::Let(_) => {
+        //         inspect!(&t);
+        //     }
+        //     crate::ast::Term::If(_) => todo!(),
+        //     crate::ast::Term::Print(what) => {
 
-                self.print_queue.push(it);
-            }
-            crate::ast::Term::First(_) => todo!(),
-            crate::ast::Term::Second(_) => todo!(),
-            crate::ast::Term::Bool(_) => todo!(),
-            crate::ast::Term::Tuple(_) => todo!(),
-            crate::ast::Term::Var(_) => todo!(),
-        }
+        //     }
+        //     crate::ast::Term::First(_) => todo!(),
+        //     crate::ast::Term::Second(_) => todo!(),
+        //     crate::ast::Term::Bool(_) => todo!(),
+        //     crate::ast::Term::Tuple(_) => todo!(),
+        //     crate::ast::Term::Var(_) => todo!(),
+        // }
 
         Ok(())
     }
