@@ -88,19 +88,28 @@ impl State {
                         int!($it, x.value $op z.value);
                     }
 
+                    (Term::Var(v), Term::Var(v2)) => vitao!(v, v2, $nm),
+                    (Term::Var(v), Term::Int(i)) | (Term::Int(i), Term::Var(v)) => vitao!(known i, v, $nm),
+
+
                     what => panic!("{} => Just ints. found {what:?}", $nm),
                 }
             };
         }
 
-        macro_rules! loveintcomp {
+        macro_rules! ohyeahcomp {
             ($it:expr, $binary:ident, $nm: expr, $op:tt) => {
                 match (self.bag_or_die(*$binary.lhs.clone(), parent), self.bag_or_die(*$binary.rhs.clone(), parent)) {
                     (Term::Int(x), Term::Int(z)) => {
                         maybe!($it, x.value $op z.value);
                     }
 
-                    _ => panic!(concat!($nm, "=> Just ints.")),
+                    (Term::Var(v), Term::Var(v2)) => robertocomparacoes!(v, v2, $nm),
+                    (Term::Var(v), Term::Int(i)) | (Term::Int(i), Term::Var(v)) => robertocomparacoes!(known i, v, $nm),
+
+                    (Term::Var(v), Term::Str(i)) | (Term::Str(i), Term::Var(v)) => robertocomparacoes!(knownAsString i, v, $nm),
+
+                    _ => panic!(concat!($nm, "=> Just ints or strings. With rules of course.")),
                 }
             };
         }
@@ -118,6 +127,22 @@ impl State {
                 self.constants
                     .insert(self.it, ("void*".to_string(), "0".to_string()));
                 self.types.insert(self.it, UNKNOWN);
+
+                self.it
+            }};
+
+            (int) => {{
+                self.constants
+                    .insert(self.it, ("int*".to_string(), "0".to_string()));
+                self.types.insert(self.it, INT);
+
+                self.it
+            }};
+
+            (boolean) => {{
+                self.constants
+                    .insert(self.it, ("char*".to_string(), "0".to_string()));
+                self.types.insert(self.it, MAYBE);
 
                 self.it
             }};
@@ -165,8 +190,6 @@ impl State {
 
         macro_rules! vitd {
             ($a:tt + $b:tt) => {{
-                let rr = self.it;
-                // phonk!(rr, $a.value);
                 self.it += 1;
 
                 let vara = self
@@ -178,10 +201,111 @@ impl State {
                     .variables
                     .get($b.text.as_str())
                     .expect("VARIABLE NOT FOUND VADIM.");
-                let result = lazy!();
+
+                let result = lazy!(int);
 
                 push!("v_{result} = calloc(1024, sizeof(char));");
                 push!("S(&v_{result},&t_{result}, &v_{var},&v_{vara},t_{var},t_{vara});");
+            }};
+        }
+
+        macro_rules! vitao {
+            (known $a:tt, $b:tt, $nm:expr) => {{
+                let rr = self.it;
+                self.it += 1;
+                int!(rr, $a.value);
+
+                let var = self
+                    .variables
+                    .get($b.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+                let result = lazy!(int);
+
+                push!("v_{result} = calloc(1, sizeof(char));");
+                push!(
+                    "MathEvaluateA((int*)&v_{result},&v_{var},&v_{rr},t_{var},i, {});",
+                    $nm
+                );
+            }};
+
+            ($a:tt, $b:tt, $nm:expr) => {{
+                self.it += 1;
+                let result = lazy!(int);
+
+                let vara = self
+                    .variables
+                    .get($a.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+
+                let var = self
+                    .variables
+                    .get($b.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+
+                push!("v_{result} = calloc(1, sizeof(int));");
+                push!(
+                    "MathEvaluateA((int*)&v_{result}, &v_{var},&v_{vara},t_{var},t_{vara}, {});",
+                    $nm
+                );
+            }};
+        }
+
+        macro_rules! robertocomparacoes {
+            (known $a:tt, $b:tt, $nm:expr) => {{
+                let rr = self.it;
+                self.it += 1;
+                int!(rr, $a.value);
+
+                let var = self
+                    .variables
+                    .get($b.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+                let result = lazy!(boolean);
+
+                push!("v_{result} = calloc(1, sizeof(char));");
+                push!(
+                    "BinaryEvaluateA((char*)&v_{result},&v_{var},&v_{rr},t_{var},i, {});",
+                    $nm
+                );
+            }};
+
+            (knownAsString $a:tt, $b:tt, $nm:expr) => {{
+                let rr = self.it;
+                self.it += 1;
+                phonk!(rr, $a.value);
+
+                let var = self
+                    .variables
+                    .get($b.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+                let result = lazy!(boolean);
+
+                push!("v_{result} = calloc(1, sizeof(char));");
+                push!(
+                    "BinaryEvaluateA((char*)&v_{result},&v_{var},&v_{rr},t_{var},i, {});",
+                    $nm
+                );
+            }};
+
+            ($a:tt, $b:tt, $nm:expr) => {{
+                self.it += 1;
+                let result = lazy!(boolean);
+
+                let vara = self
+                    .variables
+                    .get($a.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+
+                let var = self
+                    .variables
+                    .get($b.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+
+                push!("v_{result} = calloc(1, sizeof(char));");
+                push!(
+                    "BinaryEvaluateA((char*)&v_{result}, &v_{var},&v_{vara},t_{var},t_{vara}, {});",
+                    $nm
+                );
             }};
         }
 
@@ -202,7 +326,7 @@ impl State {
                         inspect!(&comp.otherwise)
                     };
 
-                    panic!("{}", res);
+                    panic!("{res}");
                 }
                 t @ Term::Binary(_) => {
                     let res = inspect!(&t);
@@ -222,21 +346,22 @@ impl State {
                 ) {
                     (Term::Int(x), Term::Int(z)) => int!(self.it, x.value + z.value),
                     (Term::Str(s), Term::Str(s2)) => phonk!(self.it, s.value + &s2.value),
-                    (Term::Var(v), Term::Int(i)) | (Term::Int(i), Term::Var(v)) => vitc!(i + v),
                     (Term::Var(v), Term::Var(v2)) => vitd!(v + v2),
+                    (Term::Var(v), Term::Int(i)) | (Term::Int(i), Term::Var(v)) => vitc!(i + v),
                     (Term::Str(s), Term::Var(v)) | (Term::Var(v), Term::Str(s)) => vits!(s + v),
 
                     what => panic!("Add => Just ints and strings. found {what:?}"),
                 },
 
-                crate::ast::BinaryOp::Div => loveint!(self.it, binary, "Div", %),
-                crate::ast::BinaryOp::Sub => loveint!(self.it, binary, "Sub", *),
+                crate::ast::BinaryOp::Div => loveint!(self.it, binary, "Div", /),
+                crate::ast::BinaryOp::Sub => loveint!(self.it, binary, "Sub", -),
                 crate::ast::BinaryOp::Rem => loveint!(self.it, binary, "Rem", %),
                 crate::ast::BinaryOp::Mul => loveint!(self.it, binary, "Mul", *),
-                crate::ast::BinaryOp::Lt => loveintcomp!(self.it, binary, "Lt", <),
-                crate::ast::BinaryOp::Gt => loveintcomp!(self.it, binary, "Gt", >),
-                crate::ast::BinaryOp::Lte => loveintcomp!(self.it, binary, "Lte", >=),
-                crate::ast::BinaryOp::Gte => loveintcomp!(self.it, binary, "Gte", <=),
+
+                crate::ast::BinaryOp::Lt => ohyeahcomp!(self.it, binary, "Lt", <),
+                crate::ast::BinaryOp::Gt => ohyeahcomp!(self.it, binary, "Gt", >),
+                crate::ast::BinaryOp::Lte => ohyeahcomp!(self.it, binary, "Lte", >=),
+                crate::ast::BinaryOp::Gte => ohyeahcomp!(self.it, binary, "Gte", <=),
 
                 crate::ast::BinaryOp::Eq => match (*binary.lhs.clone(), *binary.rhs.clone()) {
                     (Term::Int(x), Term::Int(z)) => {
@@ -253,7 +378,7 @@ impl State {
                         maybe!(self.it, b.value == b2.value);
                     }
 
-                    _ => panic!("Eq => Invalid types!"),
+                    _ => ohyeahcomp!(self.it, binary, "Eq", ==),
                 },
 
                 crate::ast::BinaryOp::Neq => match (*binary.lhs.clone(), *binary.rhs.clone()) {
@@ -271,7 +396,7 @@ impl State {
                         maybe!(self.it, b.value != b2.value);
                     }
 
-                    _ => todo!("neq"),
+                    _ => ohyeahcomp!(self.it, binary, "Neq", ==),
                 },
 
                 crate::ast::BinaryOp::And => match (*binary.lhs.clone(), *binary.rhs.clone()) {
@@ -308,8 +433,12 @@ impl State {
                 self.variables.insert(r.name.text.clone(), self.it);
                 inspect!(&r.next);
             }
+
             Term::Var(v) => {
-                return *self.variables.get(&v.text).unwrap();
+                return *self
+                    .variables
+                    .get(&v.text)
+                    .expect(&format!("undefined variable: <#{}>", v.text));
             }
 
             Term::Print(p) => {

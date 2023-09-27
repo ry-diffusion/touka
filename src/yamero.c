@@ -26,6 +26,16 @@ typedef enum Kind
   u = 0xbe,
 } Kind;
 
+typedef enum BinaryOp
+{
+  Lte = 1,
+  Gte,
+  Lt,
+  Gt,
+  Eq,
+  Neq
+} BinaryOp;
+
 typedef char **PSTR;
 #define true 1
 #define false 0
@@ -85,11 +95,52 @@ void S(void *r, Kind *t_r, void *a, void *b, Kind t_a, Kind t_b)
 }
 
 /* Do the math  */
-void MathEvaluateA(int *r, void *a, void *b, Kind t_a, Kind t_b, MathOp op)
+void BinaryEvaluateA(char *r, void *a, void *b, Kind t_a, Kind t_b, MathOp op)
 {
 #define each(x, y)                      \
   case x:                               \
     *(int *)r = *(int *)a y * (int *)b; \
+    break;
+
+  if (t_a == i && t_a == t_b)
+  {
+    switch (op)
+    {
+      each(Eq, ==);
+      each(Neq, !=);
+      each(Gt, >);
+      each(Lt, <);
+      each(Gte, >=);
+      each(Lte, <=);
+    }
+  }
+
+  else if (t_a == s && t_a == t_b)
+  {
+    switch (op)
+    {
+    case Eq:
+      *r = (0 == strcmp(*(PSTR)a, *(PSTR)b));
+      break;
+
+    case Neq:
+      *r = (0 != strcmp(*(PSTR)a, *(PSTR)b));
+      break;
+    default:
+      panic("String comparation doesn't support %x. Aborting program exec.", op);
+    }
+  }
+
+  else
+    panic("Invalid %x operation between %x and %x. Aborting program exec.", op, t_a, t_b);
+#undef each
+}
+
+void MathEvaluateA(int *r, void *a, void *b, Kind t_a, Kind t_b, MathOp op)
+{
+#define each(x, y)               \
+  case x:                        \
+    *r = *(int *)a y * (int *)b; \
     break;
 
   if (t_a == i && t_a == t_b)
