@@ -163,6 +163,28 @@ impl State {
             }};
         }
 
+        macro_rules! vitd {
+            ($a:tt + $b:tt) => {{
+                let rr = self.it;
+                // phonk!(rr, $a.value);
+                self.it += 1;
+
+                let vara = self
+                    .variables
+                    .get($a.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+
+                let var = self
+                    .variables
+                    .get($b.text.as_str())
+                    .expect("VARIABLE NOT FOUND VADIM.");
+                let result = lazy!();
+
+                push!("v_{result} = calloc(1024, sizeof(char));");
+                push!("S(&v_{result},&t_{result}, &v_{var},&v_{vara},t_{var},t_{vara});");
+            }};
+        }
+
         match term {
             Term::Str(s) => {
                 phonk!(self.it, s.value);
@@ -201,6 +223,7 @@ impl State {
                     (Term::Int(x), Term::Int(z)) => int!(self.it, x.value + z.value),
                     (Term::Str(s), Term::Str(s2)) => phonk!(self.it, s.value + &s2.value),
                     (Term::Var(v), Term::Int(i)) | (Term::Int(i), Term::Var(v)) => vitc!(i + v),
+                    (Term::Var(v), Term::Var(v2)) => vitd!(v + v2),
                     (Term::Str(s), Term::Var(v)) | (Term::Var(v), Term::Str(s)) => vits!(s + v),
 
                     what => panic!("Add => Just ints and strings. found {what:?}"),
@@ -277,7 +300,9 @@ impl State {
                         int!(self.it, i.value);
                     }
 
-                    _ => todo!("let carry"),
+                    s => {
+                        inspect!(&s);
+                    }
                 };
 
                 self.variables.insert(r.name.text.clone(), self.it);

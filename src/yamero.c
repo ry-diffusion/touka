@@ -3,7 +3,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef enum
+#define panic(fmt, ...)                              \
+  do                                                 \
+  {                                                  \
+    fprintf(stderr, "ToukaRT: " fmt, ##__VA_ARGS__); \
+    exit(0);                                         \
+  } while (0)
+
+typedef enum MathOp
+{
+  Sub = 0x99,
+  Rem = 0x98,
+  Mul = 0x97,
+  Div = 0x96
+} MathOp;
+
+typedef enum Kind
 {
   s = 0xca,
   i = 0xfe,
@@ -64,10 +79,30 @@ void S(void *r, Kind *t_r, void *a, void *b, Kind t_a, Kind t_b)
   }
 
   else
-  {
-    fprintf(stderr, "ToukaRT: Invalid sum between %x and %x. Aborting program exec.", t_a, t_b);
-    exit(1);
-  }
+    panic("Invalid sum between %x and %x. Aborting program exec.", t_a, t_b);
 
   *t_r = s;
+}
+
+/* Do the math  */
+void MathEvaluateA(int *r, void *a, void *b, Kind t_a, Kind t_b, MathOp op)
+{
+#define each(x, y)                      \
+  case x:                               \
+    *(int *)r = *(int *)a y * (int *)b; \
+    break;
+
+  if (t_a == i && t_a == t_b)
+  {
+    switch (op)
+    {
+      each(Sub, -);
+      each(Div, /);
+      each(Rem, %);
+      each(Mul, *);
+    }
+  }
+  else
+    panic("Invalid %x operation between %x and %x. Aborting program exec.", op, t_a, t_b);
+#undef each
 }

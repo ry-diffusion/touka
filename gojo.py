@@ -55,6 +55,8 @@ sukuna('let x = "2"; print("2" + x)')
 sukuna('let x = "2"; print(x + 2)')
 sukuna('let x = "2"; let y = "2" + x; print (y)')
 sukuna('let x = "2"; let y = x + 2; print (y)')
+sukuna('let a = 2; let b = 4; print(a+b)')
+sukuna('let z = 0; let y = z - 2; print (y-z)')
 chdir("../")
 
 removedirs(f"{base}/sk-wp")
