@@ -480,7 +480,7 @@ impl State {
 
                 e => {
                     inspect!(&e);
-                } // _ => panic!("what the heck? why u are putting a thing that aren't a tuple blyat!"),
+                }
             },
 
             Term::Second(t) => match self.bag_or_die(*t.value.clone(), parent) {
@@ -501,7 +501,7 @@ impl State {
 
                 e => {
                     inspect!(&e);
-                } // _ => panic!("what the heck? why u are putting a thing that aren't a tuple blyat!"),
+                }
             },
 
             Term::Var(v) => {
