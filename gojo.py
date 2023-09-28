@@ -81,7 +81,9 @@ sukuna('let x = (2, 4); print(first(x))')
 sukuna('let x = (2, 4); let _ = print(first(x)); print((second(x)))')
 sukuna('print(first(first(((2, 4)))))')
 sukuna('let y = (4, 2); print(first(first((y))))')
-sukuna('let math/sum = fn (a, b) => { a + b }; math/sum (2, 2)')
+sukuna('let dob = fn (n) => { n * 2 }; print(dob(2))')
+sukuna('let sum = fn (a, b) => { a + b }; print(sum (2, 2))')
+
 chdir("../")
 
 removedirs(f"{base}/sk-wp")

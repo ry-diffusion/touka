@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error, fs::File};
 use std::io::Write;
 
 type GenericResult<T> = Result<T, Box<dyn Error + Sync + Send>>;
-use crate::ast::{Binary, File as AstRoot, Term};
+use crate::ast::{File as AstRoot, Term};
 
 const STR: u8 = 0xca;
 const INT: u8 = 0xfe;
@@ -16,8 +16,7 @@ pub struct State {
     constants: HashMap<usize, (String, String)>,
     types: HashMap<usize, u8>,
     print_queue: Vec<usize>,
-    variables: HashMap<String, usize>,
-    functions: Vec<usize>,
+    functions: HashMap<usize, usize>,
     named_functions: HashMap<String, usize>,
     scoped_variables: HashMap<usize, HashMap<String, usize>>,
     /* function ID, Queue of Evaluatiions */
@@ -152,8 +151,14 @@ impl State {
         }
 
         macro_rules! push {
+            ($parent:expr => $($t:tt)*) => {{
+                self.evaluation_queue.entry($parent).or_default().push(format!($($t)*));
+                // dbg!(self.evaluation_queue.entry(parent).or_default());
+            }};
+
             ($($t:tt)*) => {{
                 self.evaluation_queue.entry(parent).or_default().push(format!($($t)*));
+                // dbg!(self.evaluation_queue.entry(parent).or_default());
             }};
         }
 
@@ -189,7 +194,7 @@ impl State {
             ($a:tt + $b:tt) => {{
                 self.it += 1;
 
-                let vara = getvar!(&$b.text);
+                let vara = getvar!(&$a.text);
 
                 let var = getvar!(&$b.text);
 
@@ -221,7 +226,7 @@ impl State {
                 self.it += 1;
                 let result = lazy!(int);
 
-                let vara = getvar!(&$b.text);
+                let vara = getvar!(&$a.text);
                 let var = getvar!(&$b.text);
 
                 push!("v_{result} = calloc(1, sizeof(int));");
@@ -267,7 +272,7 @@ impl State {
                 self.it += 1;
                 let result = lazy!(boolean);
 
-                let vara = getvar!($b.text.as_str());
+                let vara = getvar!($a.text.as_str());
                 let var = getvar!($b.text.as_str());
 
                 push!("v_{result} = calloc(1, sizeof(char));");
@@ -275,6 +280,15 @@ impl State {
                     "BinaryEvaluateA((char*)&v_{result}, &v_{var},&v_{vara},t_{var},t_{vara}, {});",
                     $nm
                 );
+            }};
+        }
+
+        macro_rules! putvar {
+            ($name:expr, $value:expr) => {{
+                self.scoped_variables
+                    .entry(parent)
+                    .or_default()
+                    .insert($name, $value)
             }};
         }
 
@@ -311,7 +325,7 @@ impl State {
 
             Term::If(comp) => match self.bag_or_die(*comp.condition.clone(), parent) {
                 Term::Bool(b) => {
-                    let res = if b.value {
+                    if b.value {
                         inspect!(&comp.then)
                     } else {
                         inspect!(&comp.otherwise)
@@ -424,7 +438,8 @@ impl State {
                     }
 
                     f @ Term::Function(_) => {
-                        self.named_functions.insert(r.name.text.clone(), self.it);
+                        self.named_functions
+                            .insert(r.name.text.clone(), self.it + 1);
                         inspect!(&f);
                     }
 
@@ -509,13 +524,59 @@ impl State {
             }
 
             Term::Function(f) => {
-                self.functions.push(self.it);
+                self.functions.insert(self.it, f.parameters.len());
+                let fid = self.it;
+                let mut ids = vec![];
 
-                for param in f.parameters.iter() {
+                for p in f.parameters.iter() {
+                    self.it += 1;
                     let id = lazy!();
+                    ids.push(id);
+                    putvar!(p.text.clone(), id);
                 }
 
-                self.inspect(&f.value, self.it);
+                let mut idx: usize = 0;
+
+                while idx != ids.len() * 2 {
+                    let id = ids[idx / 2];
+
+                    push!(fid => "v_{id} = a_{idx};");
+                    push!(fid => "t_{id} = *(Kind*)a_{};", idx+1);
+                    idx += 2;
+                }
+
+                self.inspect(&f.value, fid);
+                push!(fid => "*(void**)r = (void*)v_{};", self.it);
+                push!(fid => "*(Kind*)tr = t_{};", self.it);
+            }
+
+            Term::Call(c) => {
+                let f;
+
+                match &*c.callee {
+                    Term::Var(v) => {
+                        f = *self
+                            .named_functions
+                            .get(&v.text)
+                            .expect(&format!("unable to find function named: {}", v.text));
+                    }
+
+                    s => {
+                        f = inspect!(s);
+                    }
+                }
+
+                let result = lazy!();
+                let blyat = c
+                    .arguments
+                    .iter()
+                    .map(|x| inspect!(x))
+                    .map(|x| format!("&v_{x},&t_{x}"))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                // self.it += 1;
+                push!("(void (*)(void*, ...)) (f_{f}) (&v_{result}, &t_{result}, {blyat});");
+                return result;
             }
 
             e => eprintln!("ToukaGen: unimplemented {e:?}!"),
@@ -537,9 +598,13 @@ impl State {
         }
 
         for (j, k) in self.named_functions {
-            writeln!(output, "fn: {j}")?;
-
-            writeln!(output, "void f_{k}(void* r, ){{")?;
+            writeln!(output, "/* fn: {j} */")?;
+            let f_args = *self.functions.get(&k).unwrap();
+            let args = (0..f_args * 2)
+                .map(|x| format!("void *a_{x}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            writeln!(output, "void f_{k}(void* r, void *tr, {args}){{")?;
 
             if let Some(eq) = self.evaluation_queue.get(&k) {
                 for item in eq {
