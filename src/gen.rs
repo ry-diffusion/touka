@@ -363,7 +363,10 @@ impl State {
                 crate::ast::BinaryOp::Lte => ohyeahcomp!(self.it, binary, "Lte", >=),
                 crate::ast::BinaryOp::Gte => ohyeahcomp!(self.it, binary, "Gte", <=),
 
-                crate::ast::BinaryOp::Eq => match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                crate::ast::BinaryOp::Eq => match (
+                    self.bag_or_die(*binary.lhs.clone(), parent),
+                    self.bag_or_die(*binary.rhs.clone(), parent),
+                ) {
                     (Term::Int(x), Term::Int(z)) => {
                         maybe!(self.it, x.value == z.value);
                     }
@@ -381,7 +384,10 @@ impl State {
                     _ => ohyeahcomp!(self.it, binary, "Eq", ==),
                 },
 
-                crate::ast::BinaryOp::Neq => match (*binary.lhs.clone(), *binary.rhs.clone()) {
+                crate::ast::BinaryOp::Neq => match (
+                    self.bag_or_die(*binary.lhs.clone(), parent),
+                    self.bag_or_die(*binary.rhs.clone(), parent),
+                ) {
                     (Term::Int(x), Term::Int(z)) => {
                         maybe!(self.it, x.value != z.value);
                     }
@@ -455,6 +461,44 @@ impl State {
 
                 self.types.insert(rr, 0x10);
             }
+
+            Term::First(t) => match self.bag_or_die(*t.value.clone(), parent) {
+                Term::Tuple(t) => {
+                    inspect!(&t.first);
+                }
+
+                Term::Var(v) => {
+                    let result = lazy!();
+
+                    let var = self
+                        .variables
+                        .get(v.text.as_str())
+                        .expect("VARIABLE NOT FOUND VADIM.");
+
+                    push!("TupleIdxA(&v_{result}, &t_{result}, &v_{var}, t_{var}, 0);");
+                }
+
+                _ => panic!("what the heck? why u are putting a thing that aren't a tuple blyat!"),
+            },
+
+            Term::Second(t) => match self.bag_or_die(*t.value.clone(), parent) {
+                Term::Tuple(t) => {
+                    inspect!(&t.second);
+                }
+
+                Term::Var(v) => {
+                    let result = lazy!();
+
+                    let var = self
+                        .variables
+                        .get(v.text.as_str())
+                        .expect("VARIABLE NOT FOUND VADIM.");
+
+                    push!("TupleIdxA(&v_{result}, &t_{result}, &v_{var}, t_{var}, 1);");
+                }
+
+                _ => panic!("what the heck? why u are putting a thing that aren't a tuple blyat!"),
+            },
 
             Term::Var(v) => {
                 return *self

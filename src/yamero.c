@@ -180,3 +180,25 @@ void MathEvaluateA(int *r, void *a, void *b, Kind t_a, Kind t_b, MathOp op)
     panic("Invalid %x operation between %x and %x. Aborting program exec.", op, t_a, t_b);
 #undef each
 }
+
+void TupleIdxA(void **r, Kind *tR, void *t, Kind k, char idx)
+{
+  if (k != kTuple)
+    panic("I need a tuple blyat!");
+
+  if (idx > 1)
+    panic("Tuples have no more than 2 idx Vadim!");
+
+  struct Tuple _t = *(Tuple *)t;
+
+  if (!idx)
+  {
+    *r = *(void **)_t.a;
+    *tR = _t.ta;
+  }
+  else
+  {
+    *r = *(void **)_t.b;
+    *tR = _t.tb;
+  }
+}
