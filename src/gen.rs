@@ -434,6 +434,28 @@ impl State {
                 inspect!(&r.next);
             }
 
+            Term::Tuple(t) => {
+                let first = inspect!(&t.first);
+                let second = inspect!(&t.second);
+                self.it += 1;
+                let rr = self.it;
+
+                self.constants.insert(
+                    rr,
+                    (
+                        "Tuple".to_string(),
+                        format!("{{0}}"), // format!("{{v_{first},v_{second},t_{first},t_{second}}}"),
+                    ),
+                );
+
+                push!("v_{rr}.a = &v_{first};");
+                push!("v_{rr}.b = &v_{second};");
+                push!("v_{rr}.ta = t_{first};");
+                push!("v_{rr}.tb = t_{second};");
+
+                self.types.insert(rr, 0x10);
+            }
+
             Term::Var(v) => {
                 return *self
                     .variables
@@ -447,7 +469,7 @@ impl State {
                 self.print_queue.push(it);
             }
 
-            _ => {}
+            e => eprintln!("ToukaGen: unimplemented {e:?}!"),
         }
         return self.it;
     }

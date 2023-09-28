@@ -24,6 +24,7 @@ typedef enum Kind
   i = 0xfe,
   b = 0xba,
   u = 0xbe,
+  kTuple = 0x10,
 } Kind;
 
 typedef enum BinaryOp
@@ -36,32 +37,54 @@ typedef enum BinaryOp
   Neq
 } BinaryOp;
 
+typedef struct Tuple
+{
+  void *a, *b;
+  Kind ta, tb;
+} Tuple;
+
 typedef char **PSTR;
 #define true 1
 #define false 0
 
 /* Print */
-void p(void *v, Kind t)
+void pi(void *v, Kind t)
+{
+  switch (t)
+  {
+  case s:
+    printf("%s", *(char **)v);
+    break;
+  case i:
+    printf("%d", *(int *)v);
+    break;
+  case u:
+    printf("<#unknown>");
+    break;
+  case b:
+    printf("%s", *(char *)v ? "true" : "false");
+    break;
+  case kTuple:
+  {
+    struct Tuple _t = *((Tuple *)v);
+    printf("(");
+    pi(_t.a, _t.ta);
+    printf(", ");
+    pi(_t.b, _t.tb);
+    printf(")");
+    break;
+  }
+  }
+}
+
+inline void p(void *v, Kind t)
 {
 #ifdef dbg
   fprintf(stderr, "ToukaRT/IO/WriteStdout: v=%x, t=%x: ", v, t);
 #endif
 
-  switch (t)
-  {
-  case s:
-    puts(*(char **)v);
-    break;
-  case i:
-    printf("%d\n", *(int *)v);
-    break;
-  case u:
-    puts("<#unknown>");
-    break;
-  case b:
-    puts(*(char *)v ? "true" : "false");
-    break;
-  }
+  pi(v, t);
+  puts("");
 }
 
 /* Sum */

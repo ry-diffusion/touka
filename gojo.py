@@ -72,6 +72,10 @@ for op in ["<", ">", "<=", ">=", "==", "!="]:
     sukuna(f'let z = 8; print (2 {op} z)')
     sukuna(f'let z = 8; print ("2" {op} z)')
 
+
+sukuna('let x = print((2, 2)); let y = print(("2", 2)); let z = print(("", "")); 0')
+sukuna('let x = (2, 2); let y = ("2", 2); let z = (x, y); print(z)')
+sukuna('let tuple = (print(1), print(2)); print(tuple)')
 chdir("../")
 
 removedirs(f"{base}/sk-wp")
