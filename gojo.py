@@ -79,6 +79,7 @@ sukuna('let tuple = (print(1), print(2)); print(tuple)')
 sukuna('let _ = print(first((1, 0))); print(second((0, 1)))')
 sukuna('let x = (2, 4); print(first(x))')
 sukuna('let x = (2, 4); let _ = print(first(x)); print((second(x)))')
+sukuna('print(first(first(((2, 4)))))')
 chdir("../")
 
 removedirs(f"{base}/sk-wp")
