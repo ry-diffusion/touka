@@ -17,6 +17,9 @@ pub struct State {
     types: HashMap<usize, u8>,
     print_queue: Vec<usize>,
     variables: HashMap<String, usize>,
+    functions: Vec<usize>,
+    named_functions: HashMap<String, usize>,
+    scoped_variables: HashMap<usize, HashMap<String, usize>>,
     /* function ID, Queue of Evaluatiions */
     /* Of course, zero is main. */
     evaluation_queue: HashMap<usize, Vec<String>>,
@@ -160,10 +163,7 @@ impl State {
                 self.it += 1;
                 int!(rr, $a.value);
 
-                let var = self
-                    .variables
-                    .get($b.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
+                let var = getvar!($b.text.as_str());
                 let result = lazy!();
 
                 push!("v_{result} = calloc(1, sizeof(char));");
@@ -177,10 +177,7 @@ impl State {
                 phonk!(rr, $a.value);
                 self.it += 1;
 
-                let var = self
-                    .variables
-                    .get($b.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
+                let var = getvar!(&$b.text);
                 let result = lazy!();
 
                 push!("v_{result} = calloc(1024, sizeof(char));");
@@ -192,15 +189,9 @@ impl State {
             ($a:tt + $b:tt) => {{
                 self.it += 1;
 
-                let vara = self
-                    .variables
-                    .get($a.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
+                let vara = getvar!(&$b.text);
 
-                let var = self
-                    .variables
-                    .get($b.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
+                let var = getvar!(&$b.text);
 
                 let result = lazy!(int);
 
@@ -215,10 +206,8 @@ impl State {
                 self.it += 1;
                 int!(rr, $a.value);
 
-                let var = self
-                    .variables
-                    .get($b.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
+                let var = getvar!($b.text.as_str());
+
                 let result = lazy!(int);
 
                 push!("v_{result} = calloc(1, sizeof(char));");
@@ -232,15 +221,8 @@ impl State {
                 self.it += 1;
                 let result = lazy!(int);
 
-                let vara = self
-                    .variables
-                    .get($a.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
-
-                let var = self
-                    .variables
-                    .get($b.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
+                let vara = getvar!(&$b.text);
+                let var = getvar!(&$b.text);
 
                 push!("v_{result} = calloc(1, sizeof(int));");
                 push!(
@@ -256,10 +238,7 @@ impl State {
                 self.it += 1;
                 int!(rr, $a.value);
 
-                let var = self
-                    .variables
-                    .get($b.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
+                let var = getvar!(&$b.text);
                 let result = lazy!(boolean);
 
                 push!("v_{result} = calloc(1, sizeof(char));");
@@ -274,10 +253,7 @@ impl State {
                 self.it += 1;
                 phonk!(rr, $a.value);
 
-                let var = self
-                    .variables
-                    .get($b.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
+                let var = getvar!($b.text.as_str());
                 let result = lazy!(boolean);
 
                 push!("v_{result} = calloc(1, sizeof(char));");
@@ -291,21 +267,36 @@ impl State {
                 self.it += 1;
                 let result = lazy!(boolean);
 
-                let vara = self
-                    .variables
-                    .get($a.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
-
-                let var = self
-                    .variables
-                    .get($b.text.as_str())
-                    .expect("VARIABLE NOT FOUND VADIM.");
+                let vara = getvar!($b.text.as_str());
+                let var = getvar!($b.text.as_str());
 
                 push!("v_{result} = calloc(1, sizeof(char));");
                 push!(
                     "BinaryEvaluateA((char*)&v_{result}, &v_{var},&v_{vara},t_{var},t_{vara}, {});",
                     $nm
                 );
+            }};
+        }
+
+        macro_rules! getvar {
+            ($name:expr) => {{
+                let scoped = self
+                    .scoped_variables
+                    .entry(parent)
+                    .or_default()
+                    .get($name)
+                    .map(|x| *x);
+
+                let main = self
+                    .scoped_variables
+                    .entry(FN_MAIN)
+                    .or_default()
+                    .get($name)
+                    .map(|x| *x);
+
+                scoped
+                    .or(main)
+                    .expect(&format!("expected variable: <#var {parent}/{}>", $name))
             }};
         }
 
@@ -326,7 +317,7 @@ impl State {
                         inspect!(&comp.otherwise)
                     };
 
-                    panic!("{res}");
+                    // panic!("{res}");
                 }
                 t @ Term::Binary(_) => {
                     let res = inspect!(&t);
@@ -427,8 +418,14 @@ impl State {
                     Term::Str(s) => {
                         phonk!(self.it, s.value.clone());
                     }
+
                     Term::Int(i) => {
                         int!(self.it, i.value);
+                    }
+
+                    f @ Term::Function(_) => {
+                        self.named_functions.insert(r.name.text.clone(), self.it);
+                        inspect!(&f);
                     }
 
                     s => {
@@ -436,7 +433,10 @@ impl State {
                     }
                 };
 
-                self.variables.insert(r.name.text.clone(), self.it);
+                self.scoped_variables
+                    .entry(parent)
+                    .or_default()
+                    .insert(r.name.text.clone(), self.it);
                 inspect!(&r.next);
             }
 
@@ -470,10 +470,7 @@ impl State {
                 Term::Var(v) => {
                     let result = lazy!();
 
-                    let var = self
-                        .variables
-                        .get(v.text.as_str())
-                        .expect("VARIABLE NOT FOUND VADIM.");
+                    let var = getvar!(v.text.as_str());
 
                     push!("TupleIdxA(&v_{result}, &t_{result}, &v_{var}, t_{var}, 0);");
                 }
@@ -491,10 +488,7 @@ impl State {
                 Term::Var(v) => {
                     let result = lazy!();
 
-                    let var = self
-                        .variables
-                        .get(v.text.as_str())
-                        .expect("VARIABLE NOT FOUND VADIM.");
+                    let var = getvar!(v.text.as_str());
 
                     push!("TupleIdxA(&v_{result}, &t_{result}, &v_{var}, t_{var}, 1);");
                 }
@@ -505,16 +499,23 @@ impl State {
             },
 
             Term::Var(v) => {
-                return *self
-                    .variables
-                    .get(&v.text)
-                    .expect(&format!("undefined variable: <#{}>", v.text));
+                return getvar!(&v.text);
             }
 
             Term::Print(p) => {
                 let it = inspect!(&p.value);
 
                 self.print_queue.push(it);
+            }
+
+            Term::Function(f) => {
+                self.functions.push(self.it);
+
+                for param in f.parameters.iter() {
+                    let id = lazy!();
+                }
+
+                self.inspect(&f.value, self.it);
             }
 
             e => eprintln!("ToukaGen: unimplemented {e:?}!"),
@@ -533,6 +534,20 @@ impl State {
 
         for (j, k) in self.types {
             writeln!(output, "Kind t_{j} = {k};")?;
+        }
+
+        for (j, k) in self.named_functions {
+            writeln!(output, "fn: {j}")?;
+
+            writeln!(output, "void f_{k}(void* r, ){{")?;
+
+            if let Some(eq) = self.evaluation_queue.get(&k) {
+                for item in eq {
+                    writeln!(output, "{item}")?;
+                }
+            }
+
+            writeln!(output, "}}")?;
         }
 
         writeln!(output, "int main(void) {{")?;

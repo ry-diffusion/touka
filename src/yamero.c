@@ -25,6 +25,7 @@ typedef enum Kind
   b = 0xba,
   u = 0xbe,
   kTuple = 0x10,
+  kFunction = 0x42,
 } Kind;
 
 typedef enum BinaryOp
