@@ -540,14 +540,14 @@ impl State {
                 while idx != ids.len() * 2 {
                     let id = ids[idx / 2];
 
-                    push!(fid => "v_{id} = a_{idx};");
+                    push!(fid => "(void*)v_{id} = *(void**)a_{idx};");
                     push!(fid => "t_{id} = *(Kind*)a_{};", idx+1);
                     idx += 2;
                 }
 
                 self.inspect(&f.value, fid);
-                push!(fid => "*(void**)r = (void*)v_{};", self.it);
                 push!(fid => "*(Kind*)tr = t_{};", self.it);
+                push!(fid => "return (void*)v_{};", self.it);
             }
 
             Term::Call(c) => {
@@ -574,8 +574,15 @@ impl State {
                     .map(|x| format!("&v_{x},&t_{x}"))
                     .collect::<Vec<_>>()
                     .join(",");
+
+                let blyat = if blyat.len() > 0 {
+                    format!(",{blyat}")
+                } else {
+                    format!("")
+                };
+
                 // self.it += 1;
-                push!("(void (*)(void*, ...)) (f_{f}) (&v_{result}, &t_{result}, {blyat});");
+                push!("(void* (*)(void*, ...)) v_{result} = (f_{f}) (&t_{result} {blyat});");
                 return result;
             }
 
@@ -604,7 +611,12 @@ impl State {
                 .map(|x| format!("void *a_{x}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            writeln!(output, "void f_{k}(void* r, void *tr, {args}){{")?;
+            let args = if args.len() > 0 {
+                format!(",{args}")
+            } else {
+                format!("")
+            };
+            writeln!(output, "fnDecl(f_{k} {args}){{")?;
 
             if let Some(eq) = self.evaluation_queue.get(&k) {
                 for item in eq {

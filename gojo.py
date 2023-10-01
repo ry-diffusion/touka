@@ -20,20 +20,20 @@ flags = ""
 if getenv("GOJO_DBG") == "1":
     flags += "-Ddbg"
 
+
 def sukuna(expr):
     global counter
     counter += 1
     name = f"{base}/sk-{counter:03}-test"
-    toutput = f"{base}\Test {counter}.c"
+    toutput = f"{base}/Test {counter}.c"
 
-    print(f'Test {toutput}\n\t> {expr}\n\tres: ', end='', flush=True)
+    print(f"Test {toutput}\n\t> {expr}\n\tres: ", end="", flush=True)
 
-
-    with open(name, 'w') as f:
+    with open(name, "w") as f:
         f.write(expr)
-    
+
     if system(f"{rt} {name}") != 0:
-        print('unable to transpile source.')
+        print("unable to transpile source.")
         remove(name)
         return
 
@@ -45,6 +45,7 @@ def sukuna(expr):
     rename("output.c", toutput)
     remove(name)
 
+
 for op in ["*", "-", "/", "*", "%", "<", ">", "<=", ">=", "==", "!="]:
     sukuna(f"print(2 {op} 2)")
 
@@ -55,34 +56,35 @@ sukuna("print(print(1) + print(2))")
 sukuna('print (if ("dalva" == "matagal") { 2 } else { 4 })')
 sukuna('print (if ("dois" == "dois") { "sim" } else { "nao" })')
 sukuna('print (if (2 == 2) { "sim" } else { "nao" })')
-sukuna('let x = 2; print(x + 2)')
-sukuna('let x = 2; print(2 + x)')
+sukuna("let x = 2; print(x + 2)")
+sukuna("let x = 2; print(2 + x)")
 sukuna('let x = "2"; print("2" + x)')
 sukuna('let x = "2"; print(x + 2)')
 sukuna('let x = "2"; let y = "2" + x; print (y)')
 sukuna('let x = "2"; let y = x + 2; print (y)')
-sukuna('let a = 2; let b = 4; print(a+b)')
-sukuna('let z = 8; let y = z - 2; print (y-z)')
+sukuna("let a = 2; let b = 4; print(a+b)")
+sukuna("let z = 8; let y = z - 2; print (y-z)")
 
 for op in ["*", "-", "/", "*", "%", "<", ">", "<=", ">=", "==", "!="]:
-    sukuna(f'let z = 8; let y = z - 2; print (y {op} z)')
+    sukuna(f"let z = 8; let y = z - 2; print (y {op} z)")
 
 
 for op in ["<", ">", "<=", ">=", "==", "!="]:
-    sukuna(f'let z = 8; print (2 {op} z)')
+    sukuna(f"let z = 8; print (2 {op} z)")
     sukuna(f'let z = 8; print ("2" {op} z)')
 
 
 sukuna('let x = print((2, 2)); let y = print(("2", 2)); let z = print(("", "")); 0')
 sukuna('let x = (2, 2); let y = ("2", 2); let z = (x, y); print(z)')
-sukuna('let tuple = (print(1), print(2)); print(tuple)')
-sukuna('let _ = print(first((1, 0))); print(second((0, 1)))')
-sukuna('let x = (2, 4); print(first(x))')
-sukuna('let x = (2, 4); let _ = print(first(x)); print((second(x)))')
-sukuna('print(first(first(((2, 4)))))')
-sukuna('let y = (4, 2); print(first(first((y))))')
-sukuna('let dob = fn (n) => { n * 2 }; print(dob(2))')
-sukuna('let sum = fn (a, b) => { a + b }; print(sum (2, 2))')
+sukuna("let tuple = (print(1), print(2)); print(tuple)")
+sukuna("let _ = print(first((1, 0))); print(second((0, 1)))")
+sukuna("let x = (2, 4); print(first(x))")
+sukuna("let x = (2, 4); let _ = print(first(x)); print((second(x)))")
+sukuna("print(first(first(((2, 4)))))")
+sukuna("let y = (4, 2); print(first(first((y))))")
+sukuna('let s = fn () => { "oi" }; print(s())')
+sukuna("let dob = fn (n) => { n * 2 }; print(dob(2))")
+sukuna("let sum = fn (a, b) => { a + b }; print(sum (2, 2))")
 
 chdir("../")
 
